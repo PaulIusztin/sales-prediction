@@ -8,8 +8,12 @@ pip install -r requirements.txt
 jupyter labextension install jupyterlab-plotly
 ```
 
-# Jupyter Lab
-Run it with:
+# Jupyter
+### Jupyter Notebook
+```shell
+jupyter notebook
+```
+### Jupyter Lab
 ```shell
 jupyter-lab
 ```
