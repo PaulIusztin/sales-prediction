@@ -81,9 +81,22 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     :return: dataframe with added features
     """
 
-    feature_to_add_func = [_add_is_new_item_feature, _add_first_shop_transaction_feature, _add_city_features]
+    feature_to_add_func = [
+        _add_time_features,
+        _add_item_revenue,
+        _add_is_new_item_feature,
+        _add_first_shop_transaction_feature,
+        _add_city_features,
+    ]
+
     for func in feature_to_add_func:
         df = func(df)
+
+    return df
+
+
+def _add_item_revenue(df: pd.DataFrame) -> pd.DataFrame:
+    df["item_revenue_day"] = df["item_price"] * df["item_cnt_day"]
 
     return df
 
@@ -151,6 +164,17 @@ def _add_city_features(df: pd.DataFrame) -> pd.DataFrame:
     df["city_coord_1"] = df["city_name"].apply(lambda x: coords[x][0])
     df["city_coord_2"] = df["city_name"].apply(lambda x: coords[x][1])
     df["country_part"] = df["city_name"].apply(lambda x: coords[x][2])
+
+    return df
+
+
+def _add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+    # df["day_of_year"] = df["date"].apply(lambda date: date.day_of_year)
+    # df["day_of_month"] = df["date"].apply(lambda date: date.day_of_year)
+    # df["day_of_week"] = df["date"].apply(lambda date: date.day_of_year)
+    # df["week_of_year"] = df["date"].apply(lambda date: date.week_of_year)
+    # df["week_of_month"] = df["date"].apply(lambda date: date.week_of_year)
+    # df["month_of_year"] = df["date"].apply(lambda date: date.month_of_year)
 
     return df
 
