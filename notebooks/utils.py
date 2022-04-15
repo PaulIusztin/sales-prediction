@@ -1,8 +1,10 @@
 import os.path
-from typing import Tuple
+from functools import partial
+from typing import Tuple, List
 
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
 from sklearn.preprocessing import LabelEncoder
 
 
@@ -31,6 +33,44 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     :param df: dataframe that will have its NaN values filled, useless columns dropped and outliers removed.
     :return: cleaned dataframe
     """
+
+    # Data does not have any NaN values.
+    # TODO: Should we keep all the columns?
+
+    df = aggregate_twin_transactions(df)
+    df = remove_outliers_iqr(df, columns=["item_price", "item_cnt_day"])
+
+    return df
+
+
+def aggregate_twin_transactions(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.groupby(["date", "item_id", "shop_id"], as_index=False).agg({
+        "item_price": ["mean"],
+        "item_cnt_day": ["sum"],
+        "date_block_num": ["first"],
+        "item_name": ["first"],
+        "item_category_id": ["first"],
+        "item_category_name": ["first"],
+        "shop_name": ["first"]
+    })
+    df.columns = [
+        "date", "item_id", "shop_id", "item_price", "item_cnt_day", "date_block_num",
+        "item_name", "item_category_id", "item_category_name", "shop_name"
+    ]
+
+    return df
+
+
+def remove_outliers_iqr(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    to_compare_df = df[columns]
+
+    q1 = to_compare_df.quantile(0.25)
+    q3 = to_compare_df.quantile(0.75)
+    iqr = q3 - q1
+
+    outliers_mask = ~((to_compare_df < (q1 - 1.5 * iqr)) | (to_compare_df > (q3 + 1.5 * iqr)))
+    outliers_mask = outliers_mask.all(axis=1)
+    df = df[outliers_mask]
 
     return df
 
@@ -66,7 +106,7 @@ def _add_first_shop_transaction_feature(df: pd.DataFrame) -> pd.DataFrame:
                   on=["date", "shop_id", "item_id"], how="left")
     df["is_first_shop_transaction"] = df["is_first_shop_transaction"].fillna(0)
     df["is_first_shop_transaction"] = df["is_first_shop_transaction"].astype("int8")
-    
+
     return df
 
 
@@ -115,8 +155,64 @@ def _add_city_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def find_most_significant_acf_values(df: pd.DataFrame, shop_id: int, keep: int = 12) -> np.ndarray:
+    return find_most_significant_autocorrelation_values(
+        df,
+        shop_id,
+        keep,
+        correlation_method="acf"
+    )
+
+
+def find_most_significant_pacf_values(df: pd.DataFrame, shop_id: int, keep: int = 12) -> np.ndarray:
+    return find_most_significant_autocorrelation_values(
+        df,
+        shop_id,
+        keep,
+        correlation_method="pacf"
+    )
+
+
+def find_most_significant_autocorrelation_values(
+        df: pd.DataFrame,
+        shop_id: int,
+        keep: int,
+        correlation_method: str
+) -> np.ndarray:
+    assert correlation_method in ("acf", "pacf")
+
+    df = df.copy()
+    df = df.query(f"shop_id == {shop_id}")
+    df = df.groupby("date").sum()
+    df = df.sort_index()
+
+    if correlation_method == "acf":
+        f = partial(sm.tsa.stattools.acf, missing="raise")
+        nlags = len(df)
+    else:
+        f = partial(sm.tsa.stattools.pacf, method="ols")
+        nlags = len(df) // 2 - 1
+
+    assert nlags > 0
+    corr, sign = f(df["item_cnt_day"], nlags=nlags, alpha=0.05)
+    # Keep only points that have a statistical value different from 0.
+    points = [
+        (t, t_corr, t_sign) for t, (t_corr, t_sign) in enumerate(zip(corr, sign)) if
+        t_corr > t_sign[0] - t_corr or t_corr < t_sign[1] - t_corr
+    ]
+    # Sort the points by their distance from the 95% significance threshold.
+    points = sorted(points, key=lambda p: max(abs(p[1] - (p[2][0] - p[1])), abs(p[1] - (p[2][1] - p[1]))), reverse=True)
+    points = [(t, t_corr) for (t, t_corr, _) in points[:keep]]
+    points = np.array(points, dtype=np.float32)
+
+    return points
+
+
 if __name__ == "__main__":
     train_df, _ = load_data()
     train_df = clean(train_df)
     train_df = add_features(train_df)
     print(train_df)
+
+    print(find_most_significant_acf_values(train_df, shop_id=5))
+    print(find_most_significant_pacf_values(train_df, shop_id=5))
