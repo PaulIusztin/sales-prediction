@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
-from notebooks.stats import find_most_significant_acf_values, find_most_significant_pacf_values
-from notebooks.utils import is_business_day, is_holiday
+from stats import find_most_significant_acf_values, find_most_significant_pacf_values
+from utils import is_business_day, is_holiday
 
 
 def load_data(path_dir: str = "../data") -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -28,7 +28,7 @@ def load_data(path_dir: str = "../data") -> Tuple[pd.DataFrame, pd.DataFrame]:
     return train_df, test_df
 
 
-def clean(df: pd.DataFrame) -> pd.DataFrame:
+def clean(df: pd.DataFrame, remove_outliers_by: str = "threshold") -> pd.DataFrame:
     """
     :param df: dataframe that will have
         * its NaN values filled
@@ -36,15 +36,25 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
         * columns cast to the right type
         * outliers removed
         * other custom cleaning
+    :param remove_outliers_by: "iqr" or "threshold"
     :return: cleaned dataframe
     """
 
     assert df.isna().sum().sum() == 0, "We expect a dataframe without NaN values."
+    assert remove_outliers_by in ("iqr", "threshold"), "We expect a valid remove_outliers_by value."
 
     df = cast_columns(df)
     df = df.sort_values(by=["date"])
     df = aggregate_twin_transactions(df)
-    df = remove_outliers_iqr(df, columns=["item_price", "item_cnt_day"])
+    if remove_outliers_by == "iqr":
+        df = remove_outliers_iqr(df, ["item_cnt_day", "item_price"])
+    else:
+        df = remove_outliers_threshold(
+            df, {
+                "item_cnt_day": {"min": 0, "max": 1000},
+                "item_price": {"min": 0, "max": 10000}
+            }
+        )
 
     return df
 
@@ -92,23 +102,35 @@ def remove_outliers_iqr(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     return df
 
 
-def add_features(df: pd.DataFrame, features: Dict[str, Union[bool, dict]]) -> pd.DataFrame:
+def remove_outliers_threshold(df: pd.DataFrame, columns: Dict[str, Dict[str, float]]) -> pd.DataFrame:
+    outliers_mask = pd.Series([True] * df.shape[0])
+    for column, thresholds in columns.items():
+        to_compare_df = df[column]
+        min_threshold = thresholds.get("min", 0)
+        max_threshold = thresholds["max"]
+        outliers_mask &= (to_compare_df > min_threshold) & (to_compare_df < max_threshold)
+
+    return df[outliers_mask]
+
+
+def add_features(df: pd.DataFrame, features: List[Dict[str, Union[bool, dict]]]) -> pd.DataFrame:
     feature_functions = {
         "time": _add_time_features,
         "revenue": _add_item_revenue,
         "is_new_item": _add_is_new_item_feature,
         "is_first_shop_transaction": _add_first_shop_transaction_feature,
-        "city": _add_city_features,
-        "daily_lags": _add_daily_lags,
+        "daily_lags": _add_multiple_daily_lags,
+        "category_sales": _add_average_category_sales,
     }
-    assert set(features.keys()).issubset(set(feature_functions.keys()))
+    compatible_features = set(feature_functions.keys())
 
-    for feature, parameters in features.items():
-        f = feature_functions[feature]
-        if bool(parameters) is True and isinstance(parameters, dict):
-            df = f(df, **parameters)
-        elif bool(parameters) is True:
-            df = f(df)
+    df = _add_city_features(df)
+    for feature in features:
+        feature_name = feature["name"]
+        assert feature_name in compatible_features, "We expect a valid feature name."
+
+        feature_parameters = feature.get("parameters", {})
+        df = feature_functions[feature_name](df, **feature_parameters)
 
     return df
 
@@ -216,6 +238,47 @@ def _add_time_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _add_average_category_sales(df: pd.DataFrame, levels: List[str] = ("company", "city", "shop")) -> pd.DataFrame:
+    for level in levels:
+        assert level in ("company", "city", "shop")
+
+        if level == "company":
+            level_category_df = df.groupby(["date", "item_category_id"], as_index=False). \
+                agg({"item_cnt_day": ["mean"], "item_price": ["mean"]})
+            level_category_df.columns = [
+                "date", "item_category_id", "company_category_cnt_day", "company_category_item_price"
+            ]
+            df = df.merge(level_category_df, on=["date", "item_category_id"], how="left")
+        elif level == "city":
+            level_category_df = df.groupby(["date", "city_id", "item_category_id"], as_index=False). \
+                agg({"item_cnt_day": ["mean"], "item_price": ["mean"]})
+            level_category_df.columns = [
+                "date", "city_id", "item_category_id", "city_category_cnt_day", "city_category_item_price"
+            ]
+            df = df.merge(level_category_df, on=["date", "city_id", "item_category_id"], how="left")
+        else:
+            level_category_df = df.groupby(["date", "shop_id", "item_category_id"], as_index=False). \
+                agg({"item_cnt_day": ["mean"], "item_price": ["mean"]})
+            level_category_df.columns = [
+                "date", "shop_id", "item_category_id", "shop_category_cnt_day", "shop_category_item_price"
+            ]
+            df = df.merge(level_category_df, on=["date", "shop_id", "item_category_id"], how="left")
+
+    return df
+
+
+def _add_multiple_daily_lags(
+        df: pd.DataFrame,
+        lags: List[int],
+        columns: List[str],
+        fill_value: float = 0
+) -> pd.DataFrame:
+    for column in columns:
+        df = _add_daily_lags(df, lags, column, fill_value)
+
+    return df
+
+
 def _add_daily_lags(df: pd.DataFrame, lags: List[int], column: str = "item_cnt_day", fill_value: float = 0):
     for lag in lags:
         lagged_df = df[["date", "shop_id", "item_id", column]].copy()
@@ -236,13 +299,22 @@ if __name__ == "__main__":
     train_df = clean(train_df)
     train_df = add_features(
         train_df,
-        features={
-            "revenue": True,
-            "daily_lags": {
-                "lags": [1, 30, 60, 365],
-                "fill_value": 0
+        features=[
+            {
+                "name": "revenue"
+            },
+            {
+                "name": "category_sales"
+            },
+            {
+                "name": "daily_lags",
+                "parameters": {
+                    "columns": ["item_cnt_day", "shop_category_cnt_day"],
+                    "lags": [1, 2, 4, 6],
+                    "fill_value": 0
+                }
             }
-        }
+        ]
     )
     print(train_df)
 
