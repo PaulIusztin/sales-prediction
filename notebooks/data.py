@@ -68,7 +68,8 @@ def try_load_from_cache(
     df = pd.read_feather(data_file)
     df = df.drop(columns=["index"])
 
-    if not set(features).issubset(set(meta["features"])):
+    # TODO: Implement issubset logic + take dynamically only the features that match.
+    if not set(features) == set(meta["features"]):
         shutil.rmtree(cache_dir)  # Invalidate cache.
         return None
 
