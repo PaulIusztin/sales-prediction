@@ -128,8 +128,8 @@ class LightGBMTrainer:
 
         lightgbm.plot_importance(
             self.model,
-            figsize=(15, 50),
-            height=0.9,
+            figsize=(20, 50),
+            height=0.7,
             importance_type="gain",
             max_num_features=50
         )
