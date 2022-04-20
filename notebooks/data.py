@@ -1,16 +1,20 @@
 import datetime
+import json
 import os.path
-from typing import Tuple, List, Union, Dict, Iterable
+import shutil
+from pathlib import Path
+from typing import Tuple, List, Union, Dict, Iterable, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 
+from clean import _cast_columns, _aggregate_twin_transactions, _remove_outliers_iqr, _remove_outliers_threshold
+from features import _add_item_revenue, _add_is_new_item_feature, _add_first_shop_transaction_feature, \
+    _add_city_features, _add_time_features, _add_average_category_sales, _add_multiple_daily_lags
 from stats import find_most_significant_acf_values, find_most_significant_pacf_values
-from utils import is_business_day, is_holiday
 
 
-def load_data(path_dir: str = "../data") -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_notebook(path_dir: str = "../data") -> Tuple[pd.DataFrame, pd.DataFrame]:
     items_df = pd.read_csv(os.path.join(path_dir, "items.csv"))
     item_categories_df = pd.read_csv(os.path.join(path_dir, "item_categories.csv"))
     items_df = items_df.merge(item_categories_df, on="item_category_id")
@@ -28,11 +32,72 @@ def load_data(path_dir: str = "../data") -> Tuple[pd.DataFrame, pd.DataFrame]:
     return train_df, test_df
 
 
-def clean(df: pd.DataFrame, remove_outliers_by: str = "threshold") -> pd.DataFrame:
+def load(path_dir: str = "../data") -> pd.DataFrame:
+    items_df = pd.read_csv(os.path.join(path_dir, "items.csv"))
+    item_categories_df = pd.read_csv(os.path.join(path_dir, "item_categories.csv"))
+    items_df = items_df.merge(item_categories_df, on="item_category_id")
+    shops = pd.read_csv(os.path.join(path_dir, "shops.csv"))
+
+    df = pd.read_csv(os.path.join(path_dir, "sales_train.csv"))
+    df = df.merge(items_df, on="item_id", how="left")
+    df = df.merge(shops, on="shop_id", how="left")
+
+    return df
+
+
+def try_load_from_cache(
+        features: Iterable[str],
+        path_dir: str = "../outputs"
+) -> Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]]:
+    cache_dir = Path(path_dir) / "cache"
+    if not cache_dir.exists():
+        return None
+
+    meta_file = cache_dir / "meta.json"
+    if not meta_file.exists():
+        return None
+    with open(meta_file, "r") as f:
+        try:
+            meta = json.load(f)
+        except ValueError:
+            return None
+
+    data_file = cache_dir / "data.feather"
+    if not data_file.exists():
+        return None
+    df = pd.read_feather(data_file)
+    df = df.drop(columns=["index"])
+
+    if not set(features).issubset(set(meta["features"])):
+        shutil.rmtree(cache_dir)  # Invalidate cache.
+        return None
+
+    if len(df) != meta["n_rows"]:
+        shutil.rmtree(cache_dir)  # Invalidate cache.
+        return None
+
+    return df
+
+
+def save_to_cache(df: pd.DataFrame, features: Iterable[str], path_dir: str = "../outputs") -> None:
+    cache_dir = Path(path_dir) / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    meta_file = cache_dir / "meta.json"
+    with open(meta_file, "w") as f:
+        json.dump({"n_rows": len(df), "features": features}, f)
+
+    data_file = cache_dir / "data.feather"
+    df.reset_index().to_feather(data_file)
+
+
+def pre_clean(
+        df: pd.DataFrame,
+        remove_outliers_by: str = "threshold"
+) -> pd.DataFrame:
     """
     :param df: dataframe that will have
         * its NaN values filled
-        * useless columns dropped
         * columns cast to the right type
         * outliers removed
         * other custom cleaning
@@ -43,77 +108,23 @@ def clean(df: pd.DataFrame, remove_outliers_by: str = "threshold") -> pd.DataFra
     assert df.isna().sum().sum() == 0, "We expect a dataframe without NaN values."
     assert remove_outliers_by in ("iqr", "threshold"), "We expect a valid remove_outliers_by value."
 
-    df = cast_columns(df)
+    df = _cast_columns(df)
     df = df.sort_values(by=["date"])
-    df = aggregate_twin_transactions(df)
+    df = _aggregate_twin_transactions(df)
     if remove_outliers_by == "iqr":
-        df = remove_outliers_iqr(df, ["item_cnt_day", "item_price"])
+        df = _remove_outliers_iqr(df, ["item_cnt_day", "item_price"])
     else:
-        df = remove_outliers_threshold(
+        df = _remove_outliers_threshold(
             df, {
                 "item_cnt_day": {"min": 0, "max": 1000},
-                "item_price": {"min": 0, "max": 10000}
+                "item_price": {"min": 0, "max": 50000}
             }
         )
 
     return df
 
 
-def cast_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df["date"] = pd.to_datetime(df["date"], format="%d.%m.%Y")
-    df["date_block_num"] = df["date_block_num"].astype(np.int8)
-    df["shop_id"] = df["shop_id"].astype(np.int8)
-    df["item_id"] = df["item_id"].astype(np.int16)
-    df["item_cnt_day"] = df["item_cnt_day"].astype(np.int16)
-    df["item_price"] = df["item_price"].astype(np.float32)
-
-    return df
-
-
-def aggregate_twin_transactions(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.groupby(["date", "item_id", "shop_id"], as_index=False).agg({
-        "item_price": ["mean"],
-        "item_cnt_day": ["sum"],
-        "date_block_num": ["first"],
-        "item_name": ["first"],
-        "item_category_id": ["first"],
-        "item_category_name": ["first"],
-        "shop_name": ["first"]
-    })
-    df.columns = [
-        "date", "item_id", "shop_id", "item_price", "item_cnt_day", "date_block_num",
-        "item_name", "item_category_id", "item_category_name", "shop_name"
-    ]
-
-    return df
-
-
-def remove_outliers_iqr(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
-    to_compare_df = df[columns]
-
-    q1 = to_compare_df.quantile(0.25)
-    q3 = to_compare_df.quantile(0.75)
-    iqr = q3 - q1
-
-    outliers_mask = ~((to_compare_df < (q1 - 1.5 * iqr)) | (to_compare_df > (q3 + 1.5 * iqr)))
-    outliers_mask = outliers_mask.all(axis=1)
-    df = df[outliers_mask]
-
-    return df
-
-
-def remove_outliers_threshold(df: pd.DataFrame, columns: Dict[str, Dict[str, float]]) -> pd.DataFrame:
-    outliers_mask = pd.Series([True] * df.shape[0])
-    for column, thresholds in columns.items():
-        to_compare_df = df[column]
-        min_threshold = thresholds.get("min", 0)
-        max_threshold = thresholds["max"]
-        outliers_mask &= (to_compare_df > min_threshold) & (to_compare_df < max_threshold)
-
-    return df[outliers_mask]
-
-
-def add_features(df: pd.DataFrame, features: List[Dict[str, Union[bool, dict]]]) -> pd.DataFrame:
+def add_features(df: pd.DataFrame, features: List[Dict[str, Union[str, dict]]]) -> pd.DataFrame:
     feature_functions = {
         "time": _add_time_features,
         "revenue": _add_item_revenue,
@@ -135,168 +146,59 @@ def add_features(df: pd.DataFrame, features: List[Dict[str, Union[bool, dict]]])
     return df
 
 
-def _add_item_revenue(df: pd.DataFrame) -> pd.DataFrame:
-    df["item_revenue_day"] = df["item_price"] * df["item_cnt_day"]
+def post_clean(
+        x: pd.DataFrame,
+        y: pd.DataFrame,
+        x_drop_columns: Optional[Iterable[str]] = None,
+        drop_from: datetime.datetime = None
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if drop_from is not None:
+        mask = x["date"] >= drop_from
+        x = x[mask]
+        y = y[mask]
+    if x_drop_columns is not None:
+        x = x.drop(columns=x_drop_columns)
 
-    return df
-
-
-def _add_is_new_item_feature(df: pd.DataFrame) -> pd.DataFrame:
-    is_new_items_df = df.groupby(["item_id"])["date"].min().reset_index()
-    is_new_items_df["is_new_item"] = 1
-    df = pd.merge(df, is_new_items_df[["date", "item_id", "is_new_item"]],
-                  on=["date", "item_id"], how="left")
-    df["is_new_item"] = df["is_new_item"].fillna(0)
-    df["is_new_item"] = df["is_new_item"].astype("int8")
-
-    return df
-
-
-def _add_first_shop_transaction_feature(df: pd.DataFrame) -> pd.DataFrame:
-    is_first_shop_transaction_df = df.groupby(["shop_id", "item_id"])["date"].min().reset_index()
-    is_first_shop_transaction_df["is_first_shop_transaction"] = 1
-    df = pd.merge(df, is_first_shop_transaction_df[["date", "shop_id", "item_id", "is_first_shop_transaction"]],
-                  on=["date", "shop_id", "item_id"], how="left")
-    df["is_first_shop_transaction"] = df["is_first_shop_transaction"].fillna(0)
-    df["is_first_shop_transaction"] = df["is_first_shop_transaction"].astype("int8")
-
-    return df
+    return x, y
 
 
-def _add_city_features(df: pd.DataFrame) -> pd.DataFrame:
-    df["city_name"] = df["shop_name"].apply(lambda x: x.split()[0].lower())
-    df.loc[df.city_name == "!якутск", "city_name"] = "якутск"
-    df["city_id"] = LabelEncoder().fit_transform(df["city_name"])
+def split_features_labels(df: pd.DataFrame, label_columns: Iterable[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    x = df.drop(columns=label_columns)
+    y = df[label_columns]
 
-    coords = dict()
-    coords["якутск"] = (62.028098, 129.732555, 4)
-    coords["адыгея"] = (44.609764, 40.100516, 3)
-    coords["балашиха"] = (55.8094500, 37.9580600, 1)
-    coords["волжский"] = (53.4305800, 50.1190000, 3)
-    coords["вологда"] = (59.2239000, 39.8839800, 2)
-    coords["воронеж"] = (51.6720400, 39.1843000, 3)
-    coords["выездная"] = (0, 0, 0)
-    coords["жуковский"] = (55.5952800, 38.1202800, 1)
-    coords["интернет-магазин"] = (0, 0, 0)
-    coords["казань"] = (55.7887400, 49.1221400, 4)
-    coords["калуга"] = (54.5293000, 36.2754200, 4)
-    coords["коломна"] = (55.0794400, 38.7783300, 4)
-    coords["красноярск"] = (56.0183900, 92.8671700, 4)
-    coords["курск"] = (51.7373300, 36.1873500, 3)
-    coords["москва"] = (55.7522200, 37.6155600, 1)
-    coords["мытищи"] = (55.9116300, 37.7307600, 1)
-    coords["н.новгород"] = (56.3286700, 44.0020500, 4)
-    coords["новосибирск"] = (55.0415000, 82.9346000, 4)
-    coords["омск"] = (54.9924400, 73.3685900, 4)
-    coords["ростовнадону"] = (47.2313500, 39.7232800, 3)
-    coords["спб"] = (59.9386300, 30.3141300, 2)
-    coords["самара"] = (53.2000700, 50.1500000, 4)
-    coords["сергиев"] = (56.3000000, 38.1333300, 4)
-    coords["сургут"] = (61.2500000, 73.4166700, 4)
-    coords["томск"] = (56.4977100, 84.9743700, 4)
-    coords["тюмень"] = (57.1522200, 65.5272200, 4)
-    coords["уфа"] = (54.7430600, 55.9677900, 4)
-    coords["химки"] = (55.8970400, 37.4296900, 1)
-    coords["цифровой"] = (0, 0, 0)
-    coords["чехов"] = (55.1477000, 37.4772800, 4)
-    coords["ярославль"] = (57.6298700, 39.8736800, 2)
-
-    df["city_coord_1"] = df["city_name"].apply(lambda x: coords[x][0])
-    df["city_coord_2"] = df["city_name"].apply(lambda x: coords[x][1])
-    df["country_part"] = df["city_name"].apply(lambda x: coords[x][2])
-
-    return df
+    return x, y
 
 
-def _add_time_features(df: pd.DataFrame) -> pd.DataFrame:
-    df["day_of_year"] = df["date"].apply(lambda date: date.day_of_year)
-    df["day_of_month"] = df["date"].apply(lambda date: date.day)
-    df["days_in_month"] = df["date"].apply(lambda date: date.days_in_month)
-    # Everything starts from 1, except day_of_week. Map it to [1-7] for consistency.
-    df["day_of_week"] = df["date"].apply(lambda date: date.day_of_week + 1)
-    df["week_of_year"] = df["date"].apply(lambda date: date.weekofyear)
-    df["month_of_year"] = df["date"].apply(lambda date: date.month)
+def split(x: pd.DataFrame, y: pd.DataFrame) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
+    validation_month = 32
+    test_month = 33
 
-    df["is_week_start"] = df["date"].apply(lambda date: (date.day_of_week + 1) == 1)
-    df["is_week_end"] = df["date"].apply(lambda date: (date.day_of_week + 1) == 7)
-    df["is_month_start"] = df["date"].apply(lambda date: date.is_month_start)
-    df["is_month_end"] = df["date"].apply(lambda date: date.is_month_end)
-    df["is_year_start"] = df["date"].apply(lambda date: date.is_year_start)
-    df["is_year_end"] = df["date"].apply(lambda date: date.is_year_end)
-    df["is_business_day"] = df["date"].apply(lambda date: is_business_day(date))
-    df["is_holiday"] = df["date"].apply(lambda date: is_holiday(date))
+    train_mask = x["date_block_num"] < min(validation_month, test_month)
+    x_train = x[train_mask]
+    y_train = y[train_mask]
 
-    df["is_week_start"] = df["is_week_start"].astype("int8")
-    df["is_week_end"] = df["is_week_end"].astype("int8")
-    df["is_month_start"] = df["is_month_start"].astype("int8")
-    df["is_month_end"] = df["is_month_end"].astype("int8")
-    df["is_year_start"] = df["is_year_start"].astype("int8")
-    df["is_year_end"] = df["is_year_end"].astype("int8")
-    df["is_business_day"] = df["is_business_day"].astype("int8")
-    df["is_holiday"] = df["is_holiday"].astype("int8")
+    validation_mask = x["date_block_num"] == validation_month
+    x_validation = x[validation_mask]
+    y_validation = y[validation_mask]
 
-    return df
+    test_mask = x["date_block_num"] == test_month
+    x_test = x[test_mask]
+    y_test = y[test_mask]
+
+    return {
+        "train": (x_train, y_train),
+        "validation": (x_validation, y_validation),
+        "test": (x_test, y_test)
+    }
 
 
-def _add_average_category_sales(df: pd.DataFrame, levels: List[str] = ("company", "city", "shop")) -> pd.DataFrame:
-    for level in levels:
-        assert level in ("company", "city", "shop")
-
-        if level == "company":
-            level_category_df = df.groupby(["date", "item_category_id"], as_index=False). \
-                agg({"item_cnt_day": ["mean"], "item_price": ["mean"]})
-            level_category_df.columns = [
-                "date", "item_category_id", "company_category_cnt_day", "company_category_item_price"
-            ]
-            df = df.merge(level_category_df, on=["date", "item_category_id"], how="left")
-        elif level == "city":
-            level_category_df = df.groupby(["date", "city_id", "item_category_id"], as_index=False). \
-                agg({"item_cnt_day": ["mean"], "item_price": ["mean"]})
-            level_category_df.columns = [
-                "date", "city_id", "item_category_id", "city_category_cnt_day", "city_category_item_price"
-            ]
-            df = df.merge(level_category_df, on=["date", "city_id", "item_category_id"], how="left")
-        else:
-            level_category_df = df.groupby(["date", "shop_id", "item_category_id"], as_index=False). \
-                agg({"item_cnt_day": ["mean"], "item_price": ["mean"]})
-            level_category_df.columns = [
-                "date", "shop_id", "item_category_id", "shop_category_cnt_day", "shop_category_item_price"
-            ]
-            df = df.merge(level_category_df, on=["date", "shop_id", "item_category_id"], how="left")
-
-    return df
-
-
-def _add_multiple_daily_lags(
-        df: pd.DataFrame,
-        lags: List[int],
-        columns: List[str],
-        fill_value: float = 0
-) -> pd.DataFrame:
-    for column in columns:
-        df = _add_daily_lags(df, lags, column, fill_value)
-
-    return df
-
-
-def _add_daily_lags(df: pd.DataFrame, lags: List[int], column: str = "item_cnt_day", fill_value: float = 0):
-    for lag in lags:
-        lagged_df = df[["date", "shop_id", "item_id", column]].copy()
-        lagged_df.columns = ["date", "shop_id", "item_id", f"{column}_lag_{lag}"]
-        lagged_df["date"] = lagged_df["date"] + datetime.timedelta(days=lag)
-
-        df = df.merge(lagged_df, how="left", on=["date", "shop_id", "item_id"])
-        df = df.fillna(fill_value)
-
-        initial_dtype = df[column].dtype
-        df[f"{column}_lag_{lag}"] = df[f"{column}_lag_{lag}"].astype(initial_dtype)
-
-    return df
+def scale(splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
+    return splits
 
 
 if __name__ == "__main__":
-    train_df, _ = load_data()
-    train_df = clean(train_df)
+    train_df, _ = load()
+    train_df = pre_clean(train_df)
     train_df = add_features(
         train_df,
         features=[
