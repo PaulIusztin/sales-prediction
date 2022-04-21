@@ -7,6 +7,7 @@ from typing import Tuple, List, Union, Dict, Iterable, Optional
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from clean import _cast_columns, _aggregate_twin_transactions, _remove_outliers_iqr, _remove_outliers_threshold
 from features import _add_item_revenue, _add_is_new_item_feature, _add_first_shop_transaction_feature, \
@@ -46,7 +47,7 @@ def load(path_dir: str = "../data") -> pd.DataFrame:
 
 
 def try_load_from_cache(
-        features: Iterable[str],
+        features: List[Dict[str, Union[str, dict]]],
         path_dir: str = "../outputs"
 ) -> Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]]:
     cache_dir = Path(path_dir) / "cache"
@@ -68,8 +69,7 @@ def try_load_from_cache(
     df = pd.read_feather(data_file)
     df = df.drop(columns=["index"])
 
-    # TODO: Implement issubset logic + take dynamically only the features that match.
-    if not set(features) == set(meta["features"]):
+    if not is_subset(current_features=features, cached_features=meta["features"]):
         shutil.rmtree(cache_dir)  # Invalidate cache.
         return None
 
@@ -80,7 +80,29 @@ def try_load_from_cache(
     return df
 
 
-def save_to_cache(df: pd.DataFrame, features: Iterable[str], path_dir: str = "../outputs") -> None:
+def is_subset(
+        current_features: List[Dict[str, Union[str, dict]]],
+        cached_features: List[Dict[str, Union[str, dict]]]
+) -> bool:
+    cached_features = {f["name"]: f for f in cached_features}
+    for feature_config in current_features:
+        # Check if the feature is in the cached features.
+        feature_name = feature_config["name"]
+        is_feature_in_cache = feature_name in cached_features
+        if not is_feature_in_cache:
+            return False
+
+        # Check if the feature parameters are the same.
+        feature_parameters = feature_config.get("parameters", dict())
+        cached_feature_parameters = cached_features[feature_name].get("parameters", dict())
+        has_same_parameters = feature_parameters == cached_feature_parameters
+        if not has_same_parameters:
+            return False
+
+    return True
+
+
+def save_to_cache(df: pd.DataFrame, features: List[Dict[str, Union[str, dict]]], path_dir: str = "../outputs") -> None:
     cache_dir = Path(path_dir) / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -137,7 +159,7 @@ def add_features(df: pd.DataFrame, features: List[Dict[str, Union[str, dict]]]) 
     compatible_features = set(feature_functions.keys())
 
     df = _add_city_features(df)
-    for feature in features:
+    for feature in tqdm(features, desc="Adding features to the dataframe"):
         feature_name = feature["name"]
         assert feature_name in compatible_features, "We expect a valid feature name."
 

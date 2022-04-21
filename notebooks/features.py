@@ -112,6 +112,7 @@ def _add_time_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _add_average_category_sales(df: pd.DataFrame, levels: List[str] = ("company", "city", "shop")) -> pd.DataFrame:
+    # TODO: Should we add this info only as lag / Is is data leakage?
     for level in levels:
         assert level in ("company", "city", "shop")
 
@@ -153,6 +154,8 @@ def _add_multiple_daily_lags(
 
 
 def _add_daily_lags(df: pd.DataFrame, lags: List[int], column: str = "item_cnt_day", fill_value: float = 0):
+    initial_dtype = df[column].dtype
+
     for lag in lags:
         lagged_df = df[["date", "shop_id", "item_id", column]].copy()
         lagged_df.columns = ["date", "shop_id", "item_id", f"{column}_lag_{lag}"]
@@ -160,8 +163,6 @@ def _add_daily_lags(df: pd.DataFrame, lags: List[int], column: str = "item_cnt_d
 
         df = df.merge(lagged_df, how="left", on=["date", "shop_id", "item_id"])
         df = df.fillna(fill_value)
-
-        initial_dtype = df[column].dtype
         df[f"{column}_lag_{lag}"] = df[f"{column}_lag_{lag}"].astype(initial_dtype)
 
     return df
