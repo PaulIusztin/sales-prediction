@@ -5,19 +5,11 @@ from typing import Optional, List, Dict, Union, Iterable, Tuple
 
 import pandas as pd
 
-from pipelines import MonthPriceSalesPipeline
+from datasets.base import Dataset
+from pipelines.month import MonthPriceSalesPipeline
 
 
-class MonthPriceSalesDataset:
-    DROP_COLUMNS = [
-        "item_name",
-        "item_category_name",
-        "shop_name",
-        "city_name",
-        "date",
-        "date_block_num"
-    ]
-    DROP_UNTIL_MONTH = 4  # Drop the 3 months of data, because of the lags.
+class MonthPriceSalesDataset(Dataset):
     CATEGORICAL_FEATURES = [
         "item_id",
         "shop_id",
@@ -34,7 +26,7 @@ class MonthPriceSalesDataset:
             self,
             data_dir: str,
             pipeline: MonthPriceSalesPipeline,
-            cache_dir: str = ".cache",
+            cache_dir: str = "../.cache",
     ):
         self.data_dir = Path(data_dir)
         self.cache_dir = Path(cache_dir)
@@ -48,17 +40,12 @@ class MonthPriceSalesDataset:
             data = self.read()
             data = self.pipeline.transform(data)
             self.save_to_cache(data)
+        else:
+            print("Loading data from cache.")
+
         x, y = self.pick_labels(data, label_columns=["item_sales"])
         splits = self.split(x, y)
         splits = self.scale(splits)
-
-        for split_name, (x, y) in splits.items():
-            x, y = self.drop(
-                x, y,
-                x_drop_columns=self.DROP_COLUMNS,
-                drop_until_month=self.DROP_UNTIL_MONTH
-            )
-            splits[split_name] = (x, y)
 
         return splits
 
@@ -93,17 +80,19 @@ class MonthPriceSalesDataset:
         df = pd.read_feather(data_file)
         df = df.drop(columns=["index"])
 
-        if not self._is_subset(cached_features=meta["features"]):
+        is_subset = self._is_subset(cached_features=meta["features"])
+        has_same_length = len(df) == meta["n_rows"]
+        has_same_class_state = set(MonthPriceSalesPipeline.get_class_state()) == set(meta["class_state"])
+        if not (is_subset and has_same_length and has_same_class_state):
             shutil.rmtree(self.cache_dir)  # Invalidate cache.
-            return None
 
-        if len(df) != meta["n_rows"]:
-            shutil.rmtree(self.cache_dir)  # Invalidate cache.
             return None
 
         return df
 
     def _is_subset(self, cached_features: List[Dict[str, Union[str, dict]]]) -> bool:
+        # TODO: A better check would be relative to the pipeline.__dict__ object
+        #  that reflects the whole state of the pipeline.
         current_features = self.pipeline.features
 
         cached_features = {f["name"]: f for f in cached_features}
@@ -130,27 +119,17 @@ class MonthPriceSalesDataset:
 
         meta_file = self.cache_dir / "meta.json"
         with open(meta_file, "w") as f:
-            json.dump({"n_rows": len(df), "features": features}, f)
+            json.dump(
+                {
+                    "n_rows": len(df),
+                    "features": features,
+                    "class_state": MonthPriceSalesPipeline.get_class_state()
+                },
+                f
+            )
 
         data_file = self.cache_dir / "data.feather"
         df.reset_index().to_feather(data_file)
-
-    def drop(
-            self,
-            x: pd.DataFrame,
-            y: pd.DataFrame,
-            x_drop_columns: List[str],
-            drop_until_month: int
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        # Drop rows less than the drop_rows_from.
-        mask = x["date_block_num"] >= drop_until_month
-        x = x[mask]
-        y = y[mask]
-
-        # Drop specified columns.
-        x = x.drop(columns=x_drop_columns)
-
-        return x, y
 
     def pick_labels(self, data: pd.DataFrame, label_columns: Iterable[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
         x = data.drop(columns=label_columns)
@@ -160,14 +139,18 @@ class MonthPriceSalesDataset:
 
     def split(self, x: pd.DataFrame, y: pd.DataFrame) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
         train_mask = x["date_block_num"] < min(self.VALIDATION_MONTH, self.TEST_MONTH)
+        validation_mask = x["date_block_num"] == self.VALIDATION_MONTH
+        test_mask = x["date_block_num"] == self.TEST_MONTH
+
+        # TODO: Find a better way to drop "date_block_num" column in the pipeline process.
+        x = x.drop(columns=["date_block_num"])
+
         x_train = x[train_mask]
         y_train = y[train_mask]
 
-        validation_mask = x["date_block_num"] == self.VALIDATION_MONTH
         x_validation = x[validation_mask]
         y_validation = y[validation_mask]
 
-        test_mask = x["date_block_num"] == self.TEST_MONTH
         x_test = x[test_mask]
         y_test = y[test_mask]
 
@@ -177,7 +160,8 @@ class MonthPriceSalesDataset:
             "test": (x_test, y_test)
         }
 
-    def scale(self, splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
+    def scale(self, splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]) -> Dict[
+        str, Tuple[pd.DataFrame, pd.DataFrame]]:
         return splits
 
 
@@ -207,7 +191,7 @@ if __name__ == "__main__":
     ]
     pipeline = MonthPriceSalesPipeline(features=features)
     dataset = MonthPriceSalesDataset(
-        data_dir="../data/",
+        data_dir="../../data/",
         pipeline=pipeline
     )
     data = dataset.load()

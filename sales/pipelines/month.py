@@ -9,8 +9,24 @@ import utils
 
 
 class MonthPriceSalesPipeline:
-    def __init__(self, features: List[Dict[str, Union[str, dict]]]):
+    DROP_COLUMNS = [
+        "item_name",
+        "item_category_name",
+        "shop_name",
+        "city_name",
+        "date",
+    ]
+
+    def __init__(
+            self,
+            features: List[Dict[str, Union[str, dict]]],
+            drop_columns: bool = True,
+            drop_rows: bool = True
+    ):
         self.features = features
+        self.dict_features = {f["name"]: f for f in features}  # Keep a dict version of the features for easier lookup.
+        self.drop_columns = drop_columns
+        self.drop_rows = drop_rows
 
         self.supported_features = {
             "city": self._add_city_feature,
@@ -21,10 +37,18 @@ class MonthPriceSalesPipeline:
         }
         assert all([feature["name"] in self.supported_features for feature in features]), "Features not supported."
 
+    @classmethod
+    def get_class_state(cls) -> list:
+        return list(MonthPriceSalesPipeline.__dict__.keys())
+
+    def get_state(self) -> list:
+        return list(self.__dict__.keys())
+
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
         data = self.clean(data)
         data = self.aggregate(data)
         data = self.add_features(data)
+        data = self.drop(data)
 
         return data
 
@@ -81,6 +105,19 @@ class MonthPriceSalesPipeline:
 
             f = self.supported_features[feature_name]
             data = f(data, **feature_parameters)
+
+        return data
+
+    def drop(self, data: pd.DataFrame) -> pd.DataFrame:
+        if self.drop_rows:
+            lags = self.dict_features.get("lags", {}).get("parameters", {}).get("lags", [])
+            # Drop rows that do not have all the required lags.
+            if len(lags) > 0:
+                max_lag = max(lags)
+                data = data[data["date_block_num"] >= max_lag]
+
+        if self.drop_columns:
+            data = data.drop(self.DROP_COLUMNS, axis=1)
 
         return data
 
