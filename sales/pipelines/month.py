@@ -38,6 +38,12 @@ class MonthPriceSalesPipeline:
         assert all([feature["name"] in self.supported_features for feature in features]), "Features not supported."
 
     @classmethod
+    def from_config(cls, config: dict) -> "MonthPriceSalesPipeline":
+        parameters = config["parameters"]
+
+        return cls(**parameters)
+
+    @classmethod
     def get_class_state(cls) -> list:
         return list(MonthPriceSalesPipeline.__dict__.keys())
 

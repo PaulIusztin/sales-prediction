@@ -1,4 +1,5 @@
 import json
+import logging
 import shutil
 from pathlib import Path
 from typing import Optional, List, Dict, Union, Iterable, Tuple
@@ -7,6 +8,9 @@ import pandas as pd
 
 from datasets.base import Dataset
 from pipelines.month import MonthPriceSalesPipeline
+
+
+logger = logging.getLogger(__name__)
 
 
 class MonthPriceSalesDataset(Dataset):
@@ -26,28 +30,44 @@ class MonthPriceSalesDataset(Dataset):
             self,
             data_dir: str,
             pipeline: MonthPriceSalesPipeline,
-            cache_dir: str = "../.cache",
     ):
         self.data_dir = Path(data_dir)
-        self.cache_dir = Path(cache_dir)
-        self.pipeline = pipeline
+        self.cache_dir = self.data_dir / ".cache"
 
-    def load(self) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
+        self.pipeline = pipeline
+        self._splits: Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]] = None
+
+    @classmethod
+    def from_config(cls, config: dict, data_dir: str, *args, **kwargs) -> "Dataset":
+        pipeline_config = config["dataset"]["pipeline"]
+        pipeline = MonthPriceSalesPipeline.from_config(pipeline_config)
+
+        return cls(
+            data_dir=data_dir,
+            pipeline=pipeline
+        )
+
+    def load(self):
         data = self.try_load_from_cache()
         if data is None:
-            print("Cache not found / invalid, computing dataset from scratch.")
+            logger.info("Cache not found / invalid, computing dataset from scratch.")
 
             data = self.read()
             data = self.pipeline.transform(data)
             self.save_to_cache(data)
         else:
-            print("Loading data from cache.")
+            logger.info("Loading data from cache.")
 
         x, y = self.pick_labels(data, label_columns=["item_sales"])
         splits = self.split(x, y)
         splits = self.scale(splits)
 
-        return splits
+        self._splits = splits
+
+    def get(self, split: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        assert self._splits is not None, "Dataset not loaded yet. Call load() first."
+
+        return self._splits[split]
 
     def read(self) -> pd.DataFrame:
         items_df = pd.read_csv(self.data_dir / "items.csv")
