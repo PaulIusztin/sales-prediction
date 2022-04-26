@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import shutil
@@ -143,7 +144,8 @@ class MonthPriceSalesDataset(Dataset):
                 {
                     "n_rows": len(df),
                     "features": features,
-                    "class_state": MonthPriceSalesPipeline.get_class_state()
+                    "class_state": MonthPriceSalesPipeline.get_class_state(),
+                    "datetime": datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
                 },
                 f
             )
