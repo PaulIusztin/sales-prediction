@@ -56,6 +56,8 @@ class MonthPriceSalesDataset(Dataset):
 
             data = self.read()
             data = self.pipeline.transform(data)
+
+            logger.info("Caching dataset.")
             self.save_to_cache(data)
         else:
             logger.info("Loading data from cache.")
@@ -153,9 +155,11 @@ class MonthPriceSalesDataset(Dataset):
                 },
                 f
             )
+        csv_data_file = self.cache_dir / "data.csv"
+        df.to_csv(csv_data_file, index=False)
 
-        data_file = self.cache_dir / "data.feather"
-        df.reset_index().to_feather(data_file)
+        feather_data_file = self.cache_dir / "data.feather"
+        df.reset_index().to_feather(feather_data_file)
 
     def pick_labels(self, data: pd.DataFrame, label_columns: Iterable[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
         x = data.drop(columns=label_columns)

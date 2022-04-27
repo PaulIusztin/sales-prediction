@@ -33,9 +33,38 @@ config = {
                     {
                         "name": "lags",
                         "parameters": {
-                            "columns": ["item_sales", "category_company_average_item_sales"],
-                            "lags": [1, 2, 3],
-                            "fill_value": 0
+                            "item_sales": {
+                                "lags": [1, 2, 3],
+                                "fill_value": 0
+                            },
+                            "category_company_average_item_sales": {
+                                "lags": [1, 2, 3],
+                                "fill_value": 0
+                            },
+                            "category_company_average_item_price": {
+                                "lags": [1],
+                                "fill_value": 0
+                            },
+                            "category_city_average_item_sales": {
+                                "lags": [1, 2, 3],
+                                "fill_value": 0
+                            },
+                            "category_city_average_item_price": {
+                                "lags": [1],
+                                "fill_value": 0
+                            },
+                            "category_shop_average_item_sales": {
+                                "lags": [1, 2, 3],
+                                "fill_value": 0
+                            },
+                            "category_shop_average_item_price": {
+                                "lags": [1],
+                                "fill_value": 0
+                            },
+                            "item_revenue": {
+                                "lags": [1],
+                                "fill_value": 0
+                            }
                         }
                     }
                 ]
@@ -76,7 +105,7 @@ def train(
 if __name__ == "__main__":
     # TODO: Add a better loging configuration.
     logging.basicConfig()
-    logging.getLogger().setLevel(logging.DEBUG)
+    logging.getLogger().setLevel(logging.INFO)
 
     train(
         config=config,

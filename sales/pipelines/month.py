@@ -22,6 +22,10 @@ class MonthPriceSalesPipeline:
         "shop_name",
         "city_name",
         "date",
+        "item_revenue",
+        "category_company_average_item_sales",
+        "category_city_average_item_sales",
+        "category_shop_average_item_sales"
     ]
 
     def __init__(
@@ -66,8 +70,6 @@ class MonthPriceSalesPipeline:
         return list(self.__dict__.keys())
 
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
-        data = data.iloc[:1000]
-
         logger.info("Cleaning...")
         data = self.clean(data)
         logger.info("Adding features before aggregation...")
@@ -89,6 +91,8 @@ class MonthPriceSalesPipeline:
         logger.info("Dropping unnecessary rows and columns...")
         data = self.drop(data)
         logger.info("Done...")
+
+        assert data.isna().sum().sum() == 0, "NaN values found after transforming your data."
 
         return data
 
@@ -156,16 +160,29 @@ class MonthPriceSalesPipeline:
 
     def drop(self, data: pd.DataFrame) -> pd.DataFrame:
         if self.drop_rows:
-            lags = self.dict_features.get("lags", {}).get("parameters", {}).get("lags", [])
-            # Drop rows that do not have all the required lags.
-            if len(lags) > 0:
-                max_lag = max(lags)
-                data = data[data["date_block_num"] >= max_lag]
+            max_lag = self._find_max_lag()
+            logger.info(f"Dropping rows with 'date_block_num' > {max_lag}")
+            data = data[data["date_block_num"] >= max_lag]
 
         if self.drop_columns:
-            data = data.drop(self.DROP_COLUMNS, axis=1)
+            drop_columns = [column for column in self.DROP_COLUMNS if column in data.columns]
+            data = data.drop(drop_columns, axis=1)
 
         return data
+
+    def _find_max_lag(self) -> int:
+        lags = self.dict_features.get("lags")
+        if lags is None:
+            return 0
+
+        max_lag = 0
+        lags = lags.get("parameters", {})
+        for lagged_values in lags.values():
+            column_max_lag = max(lagged_values["lags"])
+            if column_max_lag > max_lag:
+                max_lag = column_max_lag
+
+        return max_lag
 
     @classmethod
     def _add_revenue_feature(cls, data: pd.DataFrame) -> pd.DataFrame:
@@ -176,11 +193,11 @@ class MonthPriceSalesPipeline:
 
     @classmethod
     def _add_time_feature(cls, data: pd.DataFrame) -> pd.DataFrame:
-        @lru_cache
+        @lru_cache(maxsize=128)
         def get_percentage_of_days(date, validation_function):
             start_date = date.replace(day=1)
-            end_date = start_date.replace(month=start_date.month + 1) - datetime.timedelta(days=1)
-            month_dates = pd.date_range(start=start_date, end=end_date)
+            end_date = start_date + datetime.timedelta(days=date.days_in_month - 1)
+            month_dates = pd.date_range(start=start_date, end=end_date, freq="D")
 
             valid_days = [1 if validation_function(d) else 0 for d in month_dates]
             valid_days = sum(valid_days)
@@ -297,18 +314,31 @@ class MonthPriceSalesPipeline:
                     category_company_average_item_price=("item_price", "mean")
                 )
                 data = data.merge(level_category_df, on=["date_block_num", "item_category_id"], how="left")
+                data["category_company_average_item_sales"] = \
+                    data["category_company_average_item_sales"].fillna(0).astype("int16")
+                data["category_company_average_item_price"] = \
+                    data["category_company_average_item_price"].fillna(0).astype("float32")
+
             elif level == "city":
                 level_category_df = data.groupby(["date_block_num", "city_id", "item_category_id"], as_index=False).agg(
                     category_city_average_item_sales=("item_sales", "mean"),
                     category_city_average_item_price=("item_price", "mean")
                 )
                 data = data.merge(level_category_df, on=["date_block_num", "city_id", "item_category_id"], how="left")
+                data["category_city_average_item_sales"] = \
+                    data["category_city_average_item_sales"].fillna(0).astype("int16")
+                data["category_city_average_item_price"] = \
+                    data["category_city_average_item_price"].fillna(0).astype("float32")
             else:
                 level_category_df = data.groupby(["date_block_num", "shop_id", "item_category_id"], as_index=False).agg(
                     category_shop_average_item_sales=("item_sales", "mean"),
                     category_shop_average_item_price=("item_price", "mean")
                 )
                 data = data.merge(level_category_df, on=["date_block_num", "shop_id", "item_category_id"], how="left")
+                data["category_shop_average_item_sales"] = \
+                    data["category_shop_average_item_sales"].fillna(0).astype("int16")
+                data["category_shop_average_item_price"] = \
+                    data["category_shop_average_item_price"].fillna(0).astype("float32")
 
         return data
 
@@ -316,11 +346,12 @@ class MonthPriceSalesPipeline:
     def _add_multiple_lag_feature(
             cls,
             data: pd.DataFrame,
-            columns: List[str],
-            lags: List[int],
-            fill_value: int = 0
+            **kwargs
     ) -> pd.DataFrame:
-        for column in columns:
+        for column, column_lagged_params in kwargs.items():
+            lags = column_lagged_params["lags"]
+            fill_value = column_lagged_params["fill_value"]
+
             data = cls._add_lag_feature(data, column, lags, fill_value)
 
         return data
