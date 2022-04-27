@@ -20,4 +20,5 @@ class Model(ABC):
 
     @abstractmethod
     def predict(self, X, *args, **kwargs) -> pd.Series:
+        # TODO: Is is ok to let the return type be pd.Series? Maybe np.ndarray would be better.
         pass

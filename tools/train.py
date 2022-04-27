@@ -81,6 +81,14 @@ config = {
             "parameters": {
                 "predict_column": "item_sales_lag_1"
             }
+        },
+        {
+            "name": "linear_regression",
+            "parameters": {}
+        },
+        {
+            "name": "xgboost",
+            "parameters": {}
         }
     ]
 }

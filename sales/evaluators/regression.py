@@ -20,7 +20,8 @@ class RegressionEvaluator:
         if output_folder is not None:
             results_file = Path(output_folder) / "results.json"
             with open(results_file, "w") as f:
-                json.dump(results, f)
+                str_results = {k: str(v) for k, v in results.items()}
+                json.dump(str_results, f)
 
         if plot:
             assert output_folder is not None, "If you want to plot, you need to specify an output folder."

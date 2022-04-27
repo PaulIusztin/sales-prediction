@@ -45,7 +45,7 @@ class LightGBMModel(Model):
         eval_set = [(X_train, y_train), (X_validation, y_validation)]
         categorical_features = [c for c in categorical_features if c in X_train.columns]
 
-        self.model.fit(
+        self.model = self.model.fit(
             X_train, y_train,
             eval_set=eval_set,
             verbose=100,

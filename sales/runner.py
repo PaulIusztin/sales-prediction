@@ -43,7 +43,8 @@ class Runner:
         dataset.load()
 
         self.fit(dataset)
-        self.test(dataset)
+        results = self.test(dataset)
+        logger.info(f"Test results: {results}")
 
         return self.models
 

@@ -1,15 +1,22 @@
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+import xgboost as xgb
 
 from datasets import Dataset
 from models import Model
 
 
-class LinearRegressionModel(Model):
-    def __init__(self):
-        super().__init__("linear_regression")
+class XGBoostModel(Model):
+    HYPER_PARAMETERS = {
+        "n_estimators": 100,
+        "reg_lambda": 1,
+        "gamma": 0,
+        "max_depth": 3
+    }
 
-        self.model = LinearRegression()
+    def __init__(self):
+        super().__init__("xgboost")
+
+        self.model = xgb.XGBRegressor(**self.HYPER_PARAMETERS)
 
     @classmethod
     def from_config(cls, config: dict, *args, **kwargs) -> "Model":
