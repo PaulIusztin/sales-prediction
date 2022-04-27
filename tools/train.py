@@ -4,53 +4,57 @@ from datasets.month import MonthPriceSalesDataset
 from pipelines.month import MonthPriceSalesPipeline
 from runner import Runner
 
-
-# TODO: How to add revenue & time features?
 config = {
-        "dataset": {
-            "name": MonthPriceSalesDataset,
-            "parameters": {},
-            "pipeline": {
-                "name": MonthPriceSalesPipeline,
-                "parameters": {
-                    "features": [
-                        {
-                            "name": "city"
-                        },
-                        {
-                            "name": "is_new_item"
-                        },
-                        {
-                            "name": "is_first_shop_transaction"
-                        },
-                        {
-                            "name": "category_sales"
-                        },
-                        {
-                            "name": "lags",
-                            "parameters": {
-                                "columns": ["item_sales", "category_company_average_item_sales"],
-                                "lags": [1, 2, 3],
-                                "fill_value": 0
-                            }
+    "dataset": {
+        "name": MonthPriceSalesDataset,
+        "parameters": {},
+        "pipeline": {
+            "name": MonthPriceSalesPipeline,
+            "parameters": {
+                "features": [
+                    {
+                        "name": "time",
+                    },
+                    {
+                        "name": "revenue",
+                    },
+                    {
+                        "name": "city"
+                    },
+                    {
+                        "name": "is_new_item"
+                    },
+                    {
+                        "name": "is_first_shop_transaction"
+                    },
+                    {
+                        "name": "category_sales"
+                    },
+                    {
+                        "name": "lags",
+                        "parameters": {
+                            "columns": ["item_sales", "category_company_average_item_sales"],
+                            "lags": [1, 2, 3],
+                            "fill_value": 0
                         }
-                    ]
-                }
+                    }
+                ]
             }
+        }
+    },
+    "models": [
+        {
+            "name": "lightgbm",
+            "parameters": {}
         },
-        "models": [
-            {
-                "name": "lightgbm",
-                "parameters": {}
-            },
-            {
-                "name": "persistence",
-                "parameters": {
-                    "predict_column": "item_sales_lag_1"
-                }
+        {
+            "name": "persistence",
+            "parameters": {
+                "predict_column": "item_sales_lag_1"
             }
-        ]
-    }
+        }
+    ]
+}
 
 
 def train(

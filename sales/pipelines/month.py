@@ -1,3 +1,6 @@
+import datetime
+import logging
+from functools import partial, lru_cache
 from typing import Dict, List, Union
 
 import numpy as np
@@ -8,7 +11,11 @@ from tqdm import tqdm
 import utils
 
 
+logger = logging.getLogger(__name__)
+
+
 class MonthPriceSalesPipeline:
+    # TODO: Move to config file.
     DROP_COLUMNS = [
         "item_name",
         "item_category_name",
@@ -28,14 +35,22 @@ class MonthPriceSalesPipeline:
         self.drop_columns = drop_columns
         self.drop_rows = drop_rows
 
-        self.supported_features = {
+        self.before_aggregate_supported_features = {
+            "revenue": self._add_revenue_feature,
+            # "time": self._add_time_feature,
+        }
+        self.after_aggregate_supported_features = {
+            "time": self._add_time_feature,
             "city": self._add_city_feature,
             "is_new_item": self._add_is_new_item_feature,
             "is_first_shop_transaction": self._add_is_first_shop_transaction_feature,
             "category_sales": self._add_category_sales_feature,
             "lags": self._add_multiple_lag_feature
         }
-        assert all([feature["name"] in self.supported_features for feature in features]), "Features not supported."
+        self.supported_features = {**self.before_aggregate_supported_features, **self.after_aggregate_supported_features}
+        assert all(
+            [feature["name"] in self.supported_features for feature in features]
+        ), "Features not supported."
 
     @classmethod
     def from_config(cls, config: dict) -> "MonthPriceSalesPipeline":
@@ -51,10 +66,29 @@ class MonthPriceSalesPipeline:
         return list(self.__dict__.keys())
 
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        data = data.iloc[:1000]
+
+        logger.info("Cleaning...")
         data = self.clean(data)
+        logger.info("Adding features before aggregation...")
+        data = self.add_features(
+            data,
+            features=[
+                feature for feature in self.features if feature["name"] in self.before_aggregate_supported_features
+            ]
+        )
+        logger.info("Aggregating...")
         data = self.aggregate(data)
-        data = self.add_features(data)
+        logger.info("Adding features after aggregation...")
+        data = self.add_features(
+            data,
+            features=[
+                feature for feature in self.features if feature["name"] in self.after_aggregate_supported_features
+            ]
+        )
+        logger.info("Dropping unnecessary rows and columns...")
         data = self.drop(data)
+        logger.info("Done...")
 
         return data
 
@@ -89,7 +123,7 @@ class MonthPriceSalesPipeline:
         return data
 
     def aggregate(self, data: pd.DataFrame) -> pd.DataFrame:
-        data = data.groupby(["date_block_num", "shop_id", "item_id"], as_index=False).agg(
+        agg_operations = dict(
             date=("date", "min"),
             shop_name=("shop_name", "first"),
             item_category_id=("item_category_id", "first"),
@@ -100,11 +134,17 @@ class MonthPriceSalesPipeline:
             # TODO: Search item_cnt_day_avg in https://www.kaggle.com/code/deinforcement/top-1-predict-future-sales-features-lightgbm
             # item_daily_sales=("item_cnt_day", "mean")
         )
+        if "revenue" in self.dict_features:
+            agg_operations["item_revenue"] = ("item_revenue_day", "sum")
+
+        data = data.\
+            groupby(["date_block_num", "shop_id", "item_id"], as_index=False).\
+            agg(**agg_operations)
 
         return data
 
-    def add_features(self, data: pd.DataFrame) -> pd.DataFrame:
-        for feature_config in (pbar := tqdm(self.features)):
+    def add_features(self, data: pd.DataFrame, features: List[dict]) -> pd.DataFrame:
+        for feature_config in (pbar := tqdm(features)):
             feature_name = feature_config["name"]
             feature_parameters = feature_config.get("parameters", {})
             pbar.set_description(f"Adding feature '{feature_name}'")
@@ -124,6 +164,41 @@ class MonthPriceSalesPipeline:
 
         if self.drop_columns:
             data = data.drop(self.DROP_COLUMNS, axis=1)
+
+        return data
+
+    @classmethod
+    def _add_revenue_feature(cls, data: pd.DataFrame) -> pd.DataFrame:
+        data["item_revenue_day"] = data["item_price"] * data["item_cnt_day"]
+        data["item_revenue_day"] = data["item_revenue_day"].astype(np.float32)
+
+        return data
+
+    @classmethod
+    def _add_time_feature(cls, data: pd.DataFrame) -> pd.DataFrame:
+        @lru_cache
+        def get_percentage_of_days(date, validation_function):
+            start_date = date.replace(day=1)
+            end_date = start_date.replace(month=start_date.month + 1) - datetime.timedelta(days=1)
+            month_dates = pd.date_range(start=start_date, end=end_date)
+
+            valid_days = [1 if validation_function(d) else 0 for d in month_dates]
+            valid_days = sum(valid_days)
+            percentage_valid_days = valid_days / len(month_dates)
+
+            return percentage_valid_days
+
+        data["month"] = data["date"].apply(lambda date: date.month)
+        data["business_days_percentage"] = data["date"].apply(
+            func=partial(get_percentage_of_days, validation_function=utils.is_business_day)
+        )
+        data["holidays_percentage"] = data["date"].apply(
+            func=partial(get_percentage_of_days, validation_function=utils.is_holiday)
+        )
+
+        data["month"] = data["month"].astype("int8")
+        data["business_days_percentage"] = data["business_days_percentage"].astype("float16")
+        data["holidays_percentage"] = data["holidays_percentage"].astype("float16")
 
         return data
 

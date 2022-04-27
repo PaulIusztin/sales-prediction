@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class MonthPriceSalesDataset(Dataset):
+    # TODO: Move to config file.
     CATEGORICAL_FEATURES = [
         "item_id",
         "shop_id",
@@ -98,16 +99,18 @@ class MonthPriceSalesDataset(Dataset):
         data_file = self.cache_dir / "data.feather"
         if not data_file.exists():
             return None
-        df = pd.read_feather(data_file)
-        df = df.drop(columns=["index"])
 
         is_subset = self._is_subset(cached_features=meta["features"])
-        has_same_length = len(df) == meta["n_rows"]
-        has_same_class_state = set(MonthPriceSalesPipeline.get_class_state()) == set(meta["class_state"])
-        if not (is_subset and has_same_length and has_same_class_state):
+        # TODO: Maybe it would be better to hash every cached file with the pipeline class name.
+        has_same_class_name = self.pipeline.__class__.__name__ == meta["class_name"]
+        has_same_class_state = set(self.pipeline.get_class_state()) == set(meta["class_state"])
+        if not (is_subset and has_same_class_name and has_same_class_state):
             shutil.rmtree(self.cache_dir)  # Invalidate cache.
 
             return None
+
+        df = pd.read_feather(data_file)
+        df = df.drop(columns=["index"])
 
         return df
 
@@ -144,7 +147,8 @@ class MonthPriceSalesDataset(Dataset):
                 {
                     "n_rows": len(df),
                     "features": features,
-                    "class_state": MonthPriceSalesPipeline.get_class_state(),
+                    "class_name": self.pipeline.__class__.__name__,
+                    "class_state": self.pipeline.get_class_state(),
                     "datetime": datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
                 },
                 f

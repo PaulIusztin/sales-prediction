@@ -9,6 +9,7 @@ from models.base import Model
 
 
 class LightGBMModel(Model):
+    # TODO: Move this to a config file.
     HYPER_PARAMETERS = {
         "num_leaves": 966,
         "cat_smooth": 45.01680827234465,
