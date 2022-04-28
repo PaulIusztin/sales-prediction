@@ -1,4 +1,5 @@
 import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
 
 from datasets import Dataset
 from models import Model
@@ -19,11 +20,13 @@ class ARIMAModel(Model):
         return cls()
 
     def fit(self, dataset: Dataset) -> "Model":
-        X_train, y_train = dataset.get(split="train")
+        _, y_train = dataset.get(split="train")
 
-        self.model = self.model.fit(X_train, y_train)
+        # self.model = ARIMA(y_train, **self.HYPER_PARAMETERS)
+        # self.model.fit()
 
         return self
 
     def predict(self, X, *args, **kwargs) -> pd.Series:
-        return self.model.predict(X)
+        # return self.model.predict(X)
+        return pd.Series()
