@@ -70,6 +70,9 @@ class MonthPriceSalesPipeline:
         return list(self.__dict__.keys())
 
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        logger.info("The data before the transformations looks like:")
+        logger.info(data.info())
+
         logger.info("Cleaning...")
         data = self.clean(data)
         logger.info("Adding features before aggregation...")
@@ -93,6 +96,9 @@ class MonthPriceSalesPipeline:
         logger.info("Done...")
 
         assert data.isna().sum().sum() == 0, "NaN values found after transforming your data."
+
+        logger.info("The transformed data looks like:")
+        logger.info(data.info())
 
         return data
 

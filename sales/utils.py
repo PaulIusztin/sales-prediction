@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Iterable
 
 import holidays
 import pandas as pd
@@ -12,6 +12,16 @@ def is_holiday(date, country="ru"):
     assert country in ("ru", )
 
     return date in holidays.RU()
+
+
+def to_consistent_types(d: dict) -> dict:
+    for k, v in d.items():
+        if isinstance(v, Iterable):
+            d[k] = tuple(v)
+        elif isinstance(v, dict):
+            d[k] = to_consistent_types(v)
+
+    return d
 
 
 def remove_outliers_iqr(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:

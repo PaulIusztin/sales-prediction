@@ -13,7 +13,7 @@ from models import Model
 
 
 class RegressionEvaluator:
-    def compute(self, model: Model, dataset: Dataset, plot: bool = True, output_folder: Optional[str] = None) -> dict:
+    def compute(self, model: Model, dataset: Dataset, plot: bool = True, output_dir: Optional[str] = None) -> dict:
         X_test, y_test = dataset.get(split="test")
         y_pred = model.predict(X=X_test)
 
@@ -31,25 +31,25 @@ class RegressionEvaluator:
                 iteration=1
             )
 
-        if output_folder is not None:
-            results_file = Path(output_folder) / "results.json"
+        if output_dir is not None:
+            results_file = Path(output_dir) / "results.json"
             with open(results_file, "w") as f:
                 str_results = {k: str(v) for k, v in results.items()}
                 json.dump(str_results, f)
 
         if plot:
-            assert output_folder is not None, "If you want to plot, you need to specify an output folder."
+            assert output_dir is not None, "If you want to plot, you need to specify an output folder."
 
-            self.plot(model, y_test, y_pred, output_folder=output_folder)
+            self.plot(model, y_test, y_pred, output_dir=output_dir)
 
         return results
 
-    def plot(self, model: Model, y_true, y_pred, output_folder: str):
+    def plot(self, model: Model, y_true, y_pred, output_dir: str):
         plt.figure(figsize=(10, 10))
         plt.ylabel("Predicted")
         sns.regplot(x=y_true, y=y_pred, fit_reg=True, scatter_kws={"s": 100}, )
 
-        regplot_path = Path(output_folder) / "regplot.png"
+        regplot_path = Path(output_dir) / "regplot.png"
         plt.title(model.name)
         plt.savefig(regplot_path)
 

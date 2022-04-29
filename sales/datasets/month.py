@@ -2,11 +2,14 @@ import datetime
 import json
 import logging
 import shutil
+
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Optional, List, Dict, Union, Iterable, Tuple
 
 import pandas as pd
 
+import utils
 from datasets.base import Dataset
 from pipelines.month import MonthPriceSalesPipeline
 
@@ -16,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class MonthPriceSalesDataset(Dataset):
     # TODO: Move to config file.
+    # TODO: Encode those as one hot vectors.
     CATEGORICAL_FEATURES = [
         "item_id",
         "shop_id",
@@ -26,6 +30,7 @@ class MonthPriceSalesDataset(Dataset):
         "is_first_shop_transaction"
     ]
     VALIDATION_MONTH = 32
+    # TODO: Add a prediction line plot.
     TEST_MONTH = 33
 
     def __init__(
@@ -130,8 +135,8 @@ class MonthPriceSalesDataset(Dataset):
                 return False
 
             # Check if the feature parameters are the same.
-            feature_parameters = feature_config.get("parameters", dict())
-            cached_feature_parameters = cached_features[feature_name].get("parameters", dict())
+            feature_parameters = utils.to_consistent_types(feature_config.get("parameters", dict()))
+            cached_feature_parameters = utils.to_consistent_types(cached_features[feature_name].get("parameters", dict()))
             has_same_parameters = feature_parameters == cached_feature_parameters
             if not has_same_parameters:
                 return False
