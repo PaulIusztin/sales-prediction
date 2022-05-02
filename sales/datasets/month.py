@@ -4,10 +4,10 @@ import logging
 import shutil
 
 from pathlib import Path
-from collections.abc import Iterable
 from typing import Optional, List, Dict, Union, Iterable, Tuple
 
 import pandas as pd
+from hydra.utils import to_absolute_path
 
 import utils
 from datasets.base import Dataset
@@ -18,17 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 class MonthPriceSalesDataset(Dataset):
-    # TODO: Move to config file.
-    # TODO: Encode those as one hot vectors.
-    CATEGORICAL_FEATURES = [
-        "item_id",
-        "shop_id",
-        "city_id",
-        "country_part",
-        "item_category_id",
-        "is_new_item",
-        "is_first_shop_transaction"
-    ]
     VALIDATION_MONTH = 32
     # TODO: Add a prediction line plot.
     TEST_MONTH = 33
@@ -38,7 +27,7 @@ class MonthPriceSalesDataset(Dataset):
             data_dir: str,
             pipeline: MonthPriceSalesPipeline,
     ):
-        self.data_dir = Path(data_dir)
+        self.data_dir = Path(to_absolute_path(data_dir))
         self.cache_dir = self.data_dir / ".cache"
 
         self.pipeline = pipeline
@@ -123,7 +112,7 @@ class MonthPriceSalesDataset(Dataset):
 
     def _is_subset(self, cached_features: List[Dict[str, Union[str, dict]]]) -> bool:
         # TODO: A better check would be relative to the pipeline.__dict__ object
-        #  that reflects the whole state of the pipeline.
+        #  that reflects the whole internal state of the pipeline, otherwise changes to a function wont be reflected.
         current_features = self.pipeline.features
 
         cached_features = {f["name"]: f for f in cached_features}

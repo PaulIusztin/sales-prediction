@@ -9,12 +9,12 @@ from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
 import utils
-
+from pipelines.base import Pipeline
 
 logger = logging.getLogger(__name__)
 
 
-class MonthPriceSalesPipeline:
+class MonthPriceSalesPipeline(Pipeline):
     # TODO: Move to config file.
     DROP_COLUMNS = [
         "item_name",
@@ -26,6 +26,17 @@ class MonthPriceSalesPipeline:
         "category_company_average_item_sales",
         "category_city_average_item_sales",
         "category_shop_average_item_sales"
+    ]
+    # TODO: Check a again if all the categorical features are added.
+    CATEGORICAL_FEATURES = [
+        # "item_id",
+        # "shop_id",
+        # "city_id",
+        "country_part",
+        # "item_category_id",
+        "month",
+        "is_new_item",
+        "is_first_shop_transaction"
     ]
 
     def __init__(
@@ -62,13 +73,6 @@ class MonthPriceSalesPipeline:
 
         return cls(**parameters)
 
-    @classmethod
-    def get_class_state(cls) -> list:
-        return list(MonthPriceSalesPipeline.__dict__.keys())
-
-    def get_state(self) -> list:
-        return list(self.__dict__.keys())
-
     def transform(self, data: pd.DataFrame) -> pd.DataFrame:
         logger.info("The data before the transformations looks like:")
         logger.info(data.info())
@@ -91,6 +95,8 @@ class MonthPriceSalesPipeline:
                 feature for feature in self.features if feature["name"] in self.after_aggregate_supported_features
             ]
         )
+        logger.info("Encoding...")
+        data = self.encode(data)
         logger.info("Dropping unnecessary rows and columns...")
         data = self.drop(data)
         logger.info("Done...")
@@ -161,6 +167,12 @@ class MonthPriceSalesPipeline:
 
             f = self.supported_features[feature_name]
             data = f(data, **feature_parameters)
+
+        return data
+
+    def encode(self, data: pd.DataFrame) -> pd.DataFrame:
+        categorical_features = [f for f in self.CATEGORICAL_FEATURES if f in data.columns]
+        data = pd.get_dummies(data, columns=categorical_features)
 
         return data
 

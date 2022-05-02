@@ -52,8 +52,8 @@ class LightGBMModel(Model):
         X_train, y_train = dataset.get(split="train")
         X_validation, y_validation = dataset.get(split="validation")
 
-        categorical_features = dataset.CATEGORICAL_FEATURES
-        categorical_features = [c for c in categorical_features if c in X_train.columns]
+        # categorical_features = dataset.pipeline.CATEGORICAL_FEATURES
+        # categorical_features = [c for c in categorical_features if c in X_train.columns]
 
         lgb_train = lgb.Dataset(X_train, y_train)
         lgb_validation = lgb.Dataset(X_validation, y_validation, reference=lgb_train)
@@ -65,7 +65,7 @@ class LightGBMModel(Model):
             num_boost_round=3000,
             valid_sets=[lgb_train, lgb_validation],
             feature_name=X_train.columns.tolist(),
-            categorical_feature=categorical_features,
+            # categorical_feature=categorical_features,
             verbose_eval=100,
             evals_result=evals_result,
             early_stopping_rounds=100

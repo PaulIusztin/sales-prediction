@@ -1,4 +1,4 @@
-from typing import List, Dict, Iterable
+from typing import List, Dict
 
 import holidays
 import pandas as pd
@@ -15,8 +15,10 @@ def is_holiday(date, country="ru"):
 
 
 def to_consistent_types(d: dict) -> dict:
+    d = {**d}
+
     for k, v in d.items():
-        if isinstance(v, Iterable):
+        if isinstance(v, list):
             d[k] = tuple(v)
         elif isinstance(v, dict):
             d[k] = to_consistent_types(v)

@@ -17,17 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 class Runner:
-    def __init__(self, models: List[Model], output_dir: str = "../outputs"):
+    def __init__(self, models: List[Model], output_dir: str):
         self.models = models
         self.hooks: List[Hook] = [CoreControlHook()]
         self.evaluator = RegressionEvaluator()
 
-        self.session_name = f"experiments_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-        self.output_dir = Path(output_dir) / self.session_name
+        self.output_dir = Path(output_dir)
         logger.info(f"Runner output folder: {self.output_dir.absolute()}")
 
     @classmethod
-    def from_config(cls, config: dict, output_dir: str = "../outputs") -> "Runner":
+    def from_config(cls, config: dict, output_dir: str = "./experiments") -> "Runner":
         models: List[Model] = []
         for model_config in config["models"]:
             model_class = model_config["name"]
