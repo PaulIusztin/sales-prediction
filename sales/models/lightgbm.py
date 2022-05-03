@@ -36,6 +36,9 @@ class LightGBMModel(Model):
 
         return self
 
+    def predict(self, X, *args, **kwargs) -> pd.Series:
+        return self.model.predict(X, *args, **kwargs)
+
     def plot(self, output_dir: str):
         lgb.plot_importance(
             self.model,
@@ -46,6 +49,3 @@ class LightGBMModel(Model):
         )
         plt.title(self.name)
         plt.savefig(Path(output_dir) / "feature_importance.png")
-
-    def predict(self, X, *args, **kwargs) -> pd.Series:
-        return self.model.predict(X, *args, **kwargs)

@@ -57,24 +57,24 @@ class Runner:
     def fit(self, dataset: Dataset):
         for hook in self.hooks:
             hook.before_fit(runner=self)
-        for model in self.models:
-            model.fit(dataset)
-            # TODO: Find a better way to do generalize the plotting.
-            if hasattr(model, "plot"):
-                model_output_dir = self.output_dir / model.name
-                Path(model_output_dir).mkdir(parents=True, exist_ok=True)
 
-                model.plot(output_dir=str(model_output_dir))
+        for model in self.models:
+            model_output_dir = self.output_dir / model.name
+            model_output_dir.mkdir(parents=True, exist_ok=True)
+
+            model.fit(dataset)
+            model.plot(output_dir=str(model_output_dir))
+
         for hook in self.hooks:
             hook.after_fit(runner=self)
 
     def test(self, dataset: Dataset) -> dict:
-        # TODO: Add a prediction line plot.
         results = {}
         for model in self.models:
             model_output_dir = self.output_dir / model.name
-            Path(model_output_dir).mkdir(parents=True, exist_ok=True)
+            model_output_dir.mkdir(parents=True, exist_ok=True)
 
+            # TODO: Add a prediction line plot.
             results[model.name] = self.evaluator.compute(
                 model=model,
                 dataset=dataset,

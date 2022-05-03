@@ -33,3 +33,6 @@ class Model(ABC):
     def predict(self, X, *args, **kwargs) -> pd.Series:
         # TODO: Is is ok to let the return type be pd.Series? Maybe np.ndarray would be better.
         pass
+
+    def plot(self, output_dir: str):
+        pass
