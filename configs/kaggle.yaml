@@ -1,11 +1,11 @@
-path:
-  dataset: ../data
 dataset:
+  root_dir: ../data
   name: MonthPriceSalesDataset
   parameters:
     split_info:
       validation: 32
       test: 33
+  # TODO: Move pipeline to a group of configs.
   pipeline:
     name: MonthPriceSalesPipeline
     parameters:
@@ -67,31 +67,32 @@ dataset:
             item_revenue:
               lags: [ 1 ]
               fill_value: 0
-models:
-  - name: persistence
-    parameters:
-      hyper_parameters:
-        predict_column: item_sales_lag_1
-  - name: linear_regression
-    parameters: {}
-  - name: lightgbm
-    parameters:
-      hyper_parameters:
-        objective: mse
-        metric: rmse
-        num_leaves: 127
-        learning_rate: 0.005
-        feature_fraction: 0.75
-        bagging_fraction: 0.75
-        bagging_freq: 5
-        seed: 1
-        verbose: 1
-      meta_parameters:
-        early_stopping_rounds: 30
-  - name: xgboost
-    parameters:
-      hyper_parameters:
-        n_estimators: 100
-        reg_lambda: 1
-        gamma: 0
-        max_depth: 3
+runner:
+  models:
+    - name: persistence
+      parameters:
+        hyper_parameters:
+          predict_column: item_sales_lag_1
+    - name: linear_regression
+      parameters: {}
+    - name: lightgbm
+      parameters:
+        hyper_parameters:
+          objective: mse
+          metric: rmse
+          num_leaves: 127
+          learning_rate: 0.005
+          feature_fraction: 0.75
+          bagging_fraction: 0.75
+          bagging_freq: 5
+          seed: 1
+          verbose: 1
+        meta_parameters:
+          early_stopping_rounds: 30
+    - name: xgboost
+      parameters:
+        hyper_parameters:
+          n_estimators: 100
+          reg_lambda: 1
+          gamma: 0
+          max_depth: 3

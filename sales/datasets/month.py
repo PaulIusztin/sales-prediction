@@ -20,30 +20,14 @@ logger = logging.getLogger(__name__)
 class MonthPriceSalesDataset(Dataset):
     def __init__(
             self,
-            data_dir: str,
+            root_dir: str,
             pipeline: MonthPriceSalesPipeline,
             split_info: Dict[str, Any]
     ):
-        super().__init__(data_dir, pipeline)
-        self.split_info = split_info
+        super().__init__(pipeline, root_dir, split_info)
 
-        self.cache_dir = self.data_dir / ".cache" / self.pipeline.name
+        self.cache_dir = self.root_dir / ".cache" / self.pipeline.name
         self._splits: Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]] = None
-
-    @classmethod
-    def from_config(cls, config: dict, data_dir: str, *args, **kwargs) -> "Dataset":
-        dataset_config = config["dataset"]
-        pipeline_config = dataset_config["pipeline"]
-        # TODO: Take pipeline class from registry.
-        pipeline = MonthPriceSalesPipeline.from_config(pipeline_config)
-
-        split_info = dataset_config["parameters"]["split_info"]
-
-        return cls(
-            data_dir=data_dir,
-            pipeline=pipeline,
-            split_info=split_info
-        )
 
     def load(self):
         data = self.try_load_from_cache()
@@ -70,12 +54,12 @@ class MonthPriceSalesDataset(Dataset):
         return self._splits[split]
 
     def read(self) -> pd.DataFrame:
-        items_df = pd.read_csv(self.data_dir / "items.csv")
-        item_categories_df = pd.read_csv(self.data_dir / "item_categories.csv")
+        items_df = pd.read_csv(self.root_dir / "items.csv")
+        item_categories_df = pd.read_csv(self.root_dir / "item_categories.csv")
         items_df = items_df.merge(item_categories_df, on="item_category_id")
-        shops = pd.read_csv(self.data_dir / "shops.csv")
+        shops = pd.read_csv(self.root_dir / "shops.csv")
 
-        df = pd.read_csv(self.data_dir / "sales_train.csv")
+        df = pd.read_csv(self.root_dir / "sales_train.csv")
         df = df.merge(items_df, on="item_id", how="left")
         df = df.merge(shops, on="shop_id", how="left")
 

@@ -10,14 +10,9 @@ from runner import Runner
 def train(config: DictConfig) -> None:
     config = utils.omega_conf_to_dict(config)
 
-    data_dir = config["path"]["dataset"]
-
     # TODO: Take dataset class from registry.
-    dataset = MonthPriceSalesDataset.from_config(
-        config=config,
-        data_dir=data_dir
-    )
-    runner = Runner.from_config(config=config)
+    dataset = MonthPriceSalesDataset.from_config(config=config["dataset"])
+    runner = Runner.from_config(config=config["runner"])
     runner.run(dataset)
 
 
