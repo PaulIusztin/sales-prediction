@@ -5,8 +5,12 @@ from models.base import Model
 
 
 class PersistenceModel(Model):
-    def __init__(self, hyper_parameters: dict):
-        super().__init__(name="persistence", hyper_parameters=hyper_parameters)
+    def __init__(self, hyper_parameters: dict, ):
+        super().__init__(
+            name="persistence",
+            hyper_parameters=hyper_parameters,
+            use_scaled_data=False
+        )
 
         self.predict_column = self.hyper_parameters["predict_column"]
 

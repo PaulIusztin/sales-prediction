@@ -40,5 +40,5 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
-    def get(self, split: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def get(self, split: str, scaled: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
         pass

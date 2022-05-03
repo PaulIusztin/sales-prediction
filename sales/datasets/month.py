@@ -3,11 +3,10 @@ import json
 import logging
 import shutil
 
-from pathlib import Path
 from typing import Optional, List, Dict, Union, Iterable, Tuple, Any
 
 import pandas as pd
-from hydra.utils import to_absolute_path
+from sklearn.preprocessing import MinMaxScaler
 
 import utils
 from datasets.base import Dataset
@@ -27,7 +26,10 @@ class MonthPriceSalesDataset(Dataset):
         super().__init__(pipeline, root_dir, split_info)
 
         self.cache_dir = self.root_dir / ".cache" / self.pipeline.name
-        self._splits: Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]] = None
+
+        self.scaler = MinMaxScaler()
+        self._unscaled_splits: Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]] = None
+        self._scaled_splits: Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]] = None
 
     def load(self):
         data = self.try_load_from_cache()
@@ -43,15 +45,22 @@ class MonthPriceSalesDataset(Dataset):
             logger.info("Loading data from cache.")
 
         x, y = self.pick_labels(data, label_columns=["item_sales"])
-        splits = self.split(x, y)
-        splits = self.scale(splits)
+        # TODO: Can we find a better way to keep the unscaled splits (instead of a copy)?
+        #  Just the inverse_scale() wont work in all the cases
+        #  (e.g. it wont inverse 100% the validation & test split we need for some baselines, like the PersistenceModel)
+        self._unscaled_splits = self.split(x, y)
+        # First create a copy of the splits, then scale them.
+        self._scaled_splits = {k: (X.copy(), y.copy()) for k, (X, y) in self._unscaled_splits.items()}
+        self._scaled_splits = self.scale(self._scaled_splits)
 
-        self._splits = splits
+    def get(self, split: str, scaled: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        assert self._unscaled_splits is not None and self._scaled_splits is not None, \
+            "Dataset not loaded yet. Call load() first."
 
-    def get(self, split: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        assert self._splits is not None, "Dataset not loaded yet. Call load() first."
+        if scaled is True:
+            return self._scaled_splits[split]
 
-        return self._splits[split]
+        return self._unscaled_splits[split]
 
     def read(self) -> pd.DataFrame:
         items_df = pd.read_csv(self.root_dir / "items.csv")
@@ -83,7 +92,6 @@ class MonthPriceSalesDataset(Dataset):
             return None
 
         is_subset = self._is_subset(cached_features=meta["features"])
-        # TODO: Maybe it would be better to hash every cached file with the pipeline class name.
         has_same_class_name = self.pipeline.__class__.__name__ == meta["class_name"]
         has_same_class_state = set(self.pipeline.get_class_state()) == set(meta["class_state"])
         # has_same_object_state = self.pipeline.get_state() == meta["object_state"]
@@ -98,8 +106,6 @@ class MonthPriceSalesDataset(Dataset):
         return df
 
     def _is_subset(self, cached_features: List[Dict[str, Union[str, dict]]]) -> bool:
-        # TODO: A better check would be relative to the pipeline.__dict__ object
-        #  that reflects the whole internal state of the pipeline, otherwise changes to a function wont be reflected.
         current_features = self.pipeline.features
 
         cached_features = {f["name"]: f for f in cached_features}
@@ -124,6 +130,8 @@ class MonthPriceSalesDataset(Dataset):
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        # TODO: A better check would be relative to the pipeline.__dict__ object
+        #  that reflects the whole internal state of the pipeline, otherwise changes to a function wont be reflected.
         meta_file = self.cache_dir / "meta.json"
         with open(meta_file, "w") as f:
             json.dump(
@@ -178,4 +186,34 @@ class MonthPriceSalesDataset(Dataset):
             self,
             splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]
     ) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
+        train_x, train_y = splits["train"]
+        validation_x, validation_y = splits["validation"]
+        test_x, test_y = splits["test"]
+
+        self.scaler.fit(train_x)
+
+        scaled_train_values = self.scaler.transform(train_x)
+        scaled_validation_values = self.scaler.transform(validation_x)
+        scales_test_values = self.scaler.transform(test_x)
+
+        columns = train_x.columns
+        splits["train"] = (pd.DataFrame(scaled_train_values, columns=columns), train_y)
+        splits["validation"] = (pd.DataFrame(scaled_validation_values, columns=columns), validation_y)
+        splits["test"] = (pd.DataFrame(scales_test_values, columns=columns), test_y)
+
         return splits
+
+    def inverse_scale(
+            self, splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]
+    ) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
+        inverted_splits = dict()
+        for split_name, split_value in splits.items():
+            x, y = split_value
+
+            columns = x.columns
+            inverted_x = self.scaler.inverse_transform(x)
+            inverted_x = pd.DataFrame(inverted_x, columns=columns)
+
+            inverted_splits[split_name] = (inverted_x, y)
+
+        return inverted_splits

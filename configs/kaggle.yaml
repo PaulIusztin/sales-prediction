@@ -19,7 +19,7 @@ dataset:
         - category_company_average_item_sales
         - category_city_average_item_sales
         - category_shop_average_item_sales
-      # TODO: Check a again if all the categorical features are added.
+      # TODO: Check again if all the categorical features are added.
       categorical_features:
 #        - item_id
 #        - item_category_id

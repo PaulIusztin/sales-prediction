@@ -8,9 +8,10 @@ from datasets import Dataset
 
 
 class Model(ABC):
-    def __init__(self, name: str, hyper_parameters: Optional[dict] = None):
+    def __init__(self, name: str, hyper_parameters: Optional[dict] = None, use_scaled_data: bool = True):
         self.name = name
         self.hyper_parameters = hyper_parameters or {}
+        self.use_scaled_data = use_scaled_data
 
         # TODO: Hook it somehow to the python logger so the logger wont be None.
         self.logger: Optional[LoggerProxy] = None
