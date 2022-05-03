@@ -15,44 +15,21 @@ logger = logging.getLogger(__name__)
 
 
 class MonthPriceSalesPipeline(Pipeline):
-    # TODO: Move to config file.
-    DROP_COLUMNS = [
-        "item_name",
-        "item_category_name",
-        "shop_name",
-        "city_name",
-        "date",
-        "item_revenue",
-        "category_company_average_item_sales",
-        "category_city_average_item_sales",
-        "category_shop_average_item_sales"
-    ]
-    # TODO: Check a again if all the categorical features are added.
-    CATEGORICAL_FEATURES = [
-        # "item_id",
-        # "shop_id",
-        # "city_id",
-        "country_part",
-        # "item_category_id",
-        "month",
-        "is_new_item",
-        "is_first_shop_transaction"
-    ]
-
     def __init__(
             self,
             features: List[Dict[str, Union[str, dict]]],
-            drop_columns: bool = True,
+            categorical_features: List[str] = None,
+            drop_columns: dict = None,
             drop_rows: bool = True
     ):
         self.features = features
         self.dict_features = {f["name"]: f for f in features}  # Keep a dict version of the features for easier lookup.
+        self.categorical_features = categorical_features
         self.drop_columns = drop_columns
         self.drop_rows = drop_rows
 
         self.before_aggregate_supported_features = {
             "revenue": self._add_revenue_feature,
-            # "time": self._add_time_feature,
         }
         self.after_aggregate_supported_features = {
             "time": self._add_time_feature,
@@ -171,8 +148,9 @@ class MonthPriceSalesPipeline(Pipeline):
         return data
 
     def encode(self, data: pd.DataFrame) -> pd.DataFrame:
-        categorical_features = [f for f in self.CATEGORICAL_FEATURES if f in data.columns]
-        data = pd.get_dummies(data, columns=categorical_features)
+        if self.categorical_features is not None and len(self.categorical_features) > 0:
+            categorical_features = [f for f in self.categorical_features if f in data.columns]
+            data = pd.get_dummies(data, columns=categorical_features)
 
         return data
 
@@ -182,8 +160,8 @@ class MonthPriceSalesPipeline(Pipeline):
             logger.info(f"Dropping rows with 'date_block_num' > {max_lag}")
             data = data[data["date_block_num"] >= max_lag]
 
-        if self.drop_columns:
-            drop_columns = [column for column in self.DROP_COLUMNS if column in data.columns]
+        if self.drop_columns is not None and len(self.drop_columns) > 0:
+            drop_columns = [column for column in self.drop_columns if column in data.columns]
             data = data.drop(drop_columns, axis=1)
 
         return data

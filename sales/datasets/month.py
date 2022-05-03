@@ -4,7 +4,7 @@ import logging
 import shutil
 
 from pathlib import Path
-from typing import Optional, List, Dict, Union, Iterable, Tuple
+from typing import Optional, List, Dict, Union, Iterable, Tuple, Any
 
 import pandas as pd
 from hydra.utils import to_absolute_path
@@ -18,29 +18,31 @@ logger = logging.getLogger(__name__)
 
 
 class MonthPriceSalesDataset(Dataset):
-    VALIDATION_MONTH = 32
-    # TODO: Add a prediction line plot.
-    TEST_MONTH = 33
-
     def __init__(
             self,
             data_dir: str,
             pipeline: MonthPriceSalesPipeline,
+            split_info: Dict[str, Any]
     ):
-        self.data_dir = Path(to_absolute_path(data_dir))
-        self.cache_dir = self.data_dir / ".cache"
+        super().__init__(data_dir, pipeline)
+        self.split_info = split_info
 
-        self.pipeline = pipeline
+        self.cache_dir = self.data_dir / ".cache" / self.pipeline.name
         self._splits: Optional[Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]] = None
 
     @classmethod
     def from_config(cls, config: dict, data_dir: str, *args, **kwargs) -> "Dataset":
-        pipeline_config = config["dataset"]["pipeline"]
+        dataset_config = config["dataset"]
+        pipeline_config = dataset_config["pipeline"]
+        # TODO: Take pipeline class from registry.
         pipeline = MonthPriceSalesPipeline.from_config(pipeline_config)
+
+        split_info = dataset_config["parameters"]["split_info"]
 
         return cls(
             data_dir=data_dir,
-            pipeline=pipeline
+            pipeline=pipeline,
+            split_info=split_info
         )
 
     def load(self):
@@ -100,6 +102,7 @@ class MonthPriceSalesDataset(Dataset):
         # TODO: Maybe it would be better to hash every cached file with the pipeline class name.
         has_same_class_name = self.pipeline.__class__.__name__ == meta["class_name"]
         has_same_class_state = set(self.pipeline.get_class_state()) == set(meta["class_state"])
+        # has_same_object_state = self.pipeline.get_state() == meta["object_state"]
         if not (is_subset and has_same_class_name and has_same_class_state):
             shutil.rmtree(self.cache_dir)  # Invalidate cache.
 
@@ -145,6 +148,7 @@ class MonthPriceSalesDataset(Dataset):
                     "features": features,
                     "class_name": self.pipeline.__class__.__name__,
                     "class_state": self.pipeline.get_class_state(),
+                    # "object_state": self.pipeline.get_state(),
                     "datetime": datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
                 },
                 f
@@ -162,9 +166,9 @@ class MonthPriceSalesDataset(Dataset):
         return x, y
 
     def split(self, x: pd.DataFrame, y: pd.DataFrame) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
-        train_mask = x["date_block_num"] < min(self.VALIDATION_MONTH, self.TEST_MONTH)
-        validation_mask = x["date_block_num"] == self.VALIDATION_MONTH
-        test_mask = x["date_block_num"] == self.TEST_MONTH
+        train_mask = x["date_block_num"] < min(self.split_info["validation"], self.split_info["test"])
+        validation_mask = x["date_block_num"] == self.split_info["validation"]
+        test_mask = x["date_block_num"] == self.split_info["test"]
 
         # TODO: Find a better way to drop "date_block_num" column in the pipeline process.
         x = x.drop(columns=["date_block_num"])
@@ -178,44 +182,16 @@ class MonthPriceSalesDataset(Dataset):
         x_test = x[test_mask]
         y_test = y[test_mask]
 
+        assert all([len(x_train) != 0, len(x_validation) != 0, len(x_test) != 0]), "All splits must have data."
+
         return {
             "train": (x_train, y_train),
             "validation": (x_validation, y_validation),
             "test": (x_test, y_test)
         }
 
-    def scale(self, splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]) -> Dict[
-        str, Tuple[pd.DataFrame, pd.DataFrame]]:
+    def scale(
+            self,
+            splits: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]
+    ) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
         return splits
-
-
-if __name__ == "__main__":
-    # TODO: How to add revenue & time features?
-    features = [
-        {
-            "name": "city"
-        },
-        {
-            "name": "is_new_item"
-        },
-        {
-            "name": "is_first_shop_transaction"
-        },
-        {
-            "name": "category_sales"
-        },
-        {
-            "name": "lags",
-            "parameters": {
-                "columns": ["item_sales", "category_company_average_item_sales"],
-                "lags": [1, 2, 3],
-                "fill_value": 0
-            }
-        }
-    ]
-    pipeline = MonthPriceSalesPipeline(features=features)
-    dataset = MonthPriceSalesDataset(
-        data_dir="../../data/",
-        pipeline=pipeline
-    )
-    data = dataset.load()

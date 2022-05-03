@@ -1,4 +1,3 @@
-import datetime
 import pprint
 import logging
 
@@ -31,8 +30,7 @@ class Runner:
         for model_config in config["models"]:
             model_class = model_config["name"]
             model_class = model_registry[model_class]
-            model_parameters = model_config["parameters"]
-            model = model_class.from_config(config=model_parameters)
+            model = model_class.from_config(config=model_config)
 
             models.append(model)
 
@@ -71,6 +69,7 @@ class Runner:
             hook.after_fit(runner=self)
 
     def test(self, dataset: Dataset) -> dict:
+        # TODO: Add a prediction line plot.
         results = {}
         for model in self.models:
             model_output_dir = self.output_dir / model.name

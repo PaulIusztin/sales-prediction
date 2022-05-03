@@ -5,14 +5,10 @@ from models.base import Model
 
 
 class PersistenceModel(Model):
-    def __init__(self, predict_column: str):
-        super().__init__(name="persistence")
+    def __init__(self, hyper_parameters: dict):
+        super().__init__(name="persistence", hyper_parameters=hyper_parameters)
 
-        self.predict_column = predict_column
-
-    @classmethod
-    def from_config(cls, config: dict, *args, **kwargs) -> "Model":
-        return cls(**config)
+        self.predict_column = self.hyper_parameters["predict_column"]
 
     def fit(self, dataset: Dataset) -> "Model":
         return self

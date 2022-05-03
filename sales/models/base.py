@@ -8,17 +8,21 @@ from datasets import Dataset
 
 
 class Model(ABC):
-    def __init__(self, name: str):
+    def __init__(self, name: str, hyper_parameters: Optional[dict] = None):
         self.name = name
+        self.hyper_parameters = hyper_parameters or {}
+
+        # TODO: Hook it somehow to the python logger so the logger wont be None.
         self.logger: Optional[LoggerProxy] = None
 
     def set_logger(self, logger: LoggerProxy):
         self.logger = logger
 
     @classmethod
-    @abstractmethod
-    def from_config(cls, config, *args, **kwargs) -> "Model":
-        pass
+    def from_config(cls, config: dict, *args, **kwargs) -> "Model":
+        parameters = config["parameters"]
+
+        return cls(**parameters)
 
     @abstractmethod
     def fit(self, dataset: Dataset) -> "Model":

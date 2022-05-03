@@ -2,10 +2,33 @@ path:
   dataset: ../data
 dataset:
   name: MonthPriceSalesDataset
-  parameters: {}
+  parameters:
+    split_info:
+      validation: 32
+      test: 33
   pipeline:
     name: MonthPriceSalesPipeline
     parameters:
+      drop_columns:
+        - item_name
+        - item_category_name
+        - shop_name
+        - city_name
+        - date
+        - item_revenue
+        - category_company_average_item_sales
+        - category_city_average_item_sales
+        - category_shop_average_item_sales
+      # TODO: Check a again if all the categorical features are added.
+      categorical_features:
+#        - item_id
+#        - item_category_id
+#        - shop_id
+#        - city_id
+        - country_part
+        - month
+        - is_new_item
+        - is_first_shop_transaction
       features:
         - name: time
         - name: revenue
@@ -47,10 +70,28 @@ dataset:
 models:
   - name: persistence
     parameters:
-      predict_column: item_sales_lag_1
+      hyper_parameters:
+        predict_column: item_sales_lag_1
   - name: linear_regression
     parameters: {}
   - name: lightgbm
-    parameters: {}
+    parameters:
+      hyper_parameters:
+        objective: mse
+        metric: rmse
+        num_leaves: 127
+        learning_rate: 0.005
+        feature_fraction: 0.75
+        bagging_fraction: 0.75
+        bagging_freq: 5
+        seed: 1
+        verbose: 1
+      meta_parameters:
+        early_stopping_rounds: 30
   - name: xgboost
-    parameters: {}
+    parameters:
+      hyper_parameters:
+        n_estimators: 100
+        reg_lambda: 1
+        gamma: 0
+        max_depth: 3

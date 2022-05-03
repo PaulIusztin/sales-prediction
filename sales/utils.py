@@ -1,7 +1,8 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 
 import holidays
 import pandas as pd
+from omegaconf import DictConfig, ListConfig
 
 
 def is_business_day(date):
@@ -22,6 +23,25 @@ def to_consistent_types(d: dict) -> dict:
             d[k] = tuple(v)
         elif isinstance(v, dict):
             d[k] = to_consistent_types(v)
+
+    return d
+
+
+def omega_conf_to_dict(conf: Any) -> Any:
+    if isinstance(conf, ListConfig):
+        return [omega_conf_to_dict(item) for item in conf]
+
+    if not isinstance(conf, (ListConfig, DictConfig)):
+        return conf
+
+    d = {}
+    for k, v in conf.items():
+        if isinstance(v, ListConfig):
+            d[k] = [omega_conf_to_dict(item) for item in v]
+        elif isinstance(v, DictConfig):
+            d[k] = omega_conf_to_dict(v)
+        else:
+            d[k] = v
 
     return d
 
