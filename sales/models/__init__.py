@@ -1,7 +1,7 @@
 from .base import Model
 from .lightgbm import LightGBMModel
 from .persistence import PersistenceModel
-from .regression import LinearRegressionModel
+from .linear_regression import LinearRegressionModel
 from .xgboost import XGBoostModel
 
 

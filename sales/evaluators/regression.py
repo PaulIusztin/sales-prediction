@@ -52,8 +52,6 @@ class RegressionEvaluator:
         plt.ylabel("Predicted")
         sns.regplot(x=y_true, y=y_pred, fit_reg=True, scatter_kws={"s": 100}, )
 
-        regplot_path = Path(output_dir) / "regplot.png"
         plt.title(model.name)
-        plt.savefig(regplot_path)
-
+        plt.savefig(Path(output_dir) / "regplot.png")
         plt.clf()

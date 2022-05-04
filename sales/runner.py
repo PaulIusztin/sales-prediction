@@ -59,10 +59,11 @@ class Runner:
             hook.before_fit(runner=self)
 
         for model in self.models:
+            logger.info(f"Fitting model: {model.name}")
+            model.fit(dataset)
+
             model_output_dir = self.output_dir / model.name
             model_output_dir.mkdir(parents=True, exist_ok=True)
-
-            model.fit(dataset)
             model.plot(output_dir=str(model_output_dir))
 
         for hook in self.hooks:

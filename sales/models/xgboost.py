@@ -93,3 +93,11 @@ class XGBoostModel(Model):
         plt.tight_layout()
         plt.savefig(Path(output_dir) / "feature_importance.png")
         plt.clf()
+
+        if self.logger is not None:
+            self.logger.report_image(
+                title=self.name,
+                series="feature_importance",
+                iteration=0,
+                local_path=Path(output_dir) / "feature_importance.png"
+            )

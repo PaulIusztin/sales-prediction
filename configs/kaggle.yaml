@@ -89,7 +89,7 @@ runner:
           seed: 1
         meta_parameters:
           early_stopping_rounds: 30
-          evaluation_period: 10
+          evaluation_period: 100
     - name: xgboost
       parameters:
         hyper_parameters:
@@ -104,5 +104,5 @@ runner:
           eta: 1
         meta_parameters:
           early_stopping_rounds: 30
-          evaluation_period: 10
+          evaluation_period: 100
 
