@@ -11,9 +11,7 @@ from models.base import Model
 
 class LightGBMModel(Model):
     def __init__(self, hyper_parameters: dict, meta_parameters: dict):
-        super().__init__("lightgbm", hyper_parameters=hyper_parameters)
-
-        self.meta_parameters = meta_parameters
+        super().__init__("lightgbm", hyper_parameters=hyper_parameters, meta_parameters=meta_parameters)
 
         self._evaluation_results: Optional[dict] = None
         self._model: Optional[lgb.Booster] = None
@@ -69,22 +67,33 @@ class LightGBMModel(Model):
         return self
 
     def predict(self, X, *args, **kwargs) -> pd.Series:
+        assert self._model is not None, "Model has not been trained yet."
+
         if hasattr(self._model, "best_iteration"):
+            # It has the "best_iteration" attribute only if the early stopping callback was used when training.
             kwargs["num_iteration"] = self._model.best_iteration
 
         return self._model.predict(X, *args, **kwargs)
 
     def save(self, output_path: str):
+        assert self._model is not None, "Model has not been trained yet."
+
+        if not output_path.endswith(".txt"):
+            output_path += ".txt"
+
         self._model.save_model(output_path)
 
     def plot(self, output_dir: str):
+        assert self._model is not None, "Model has not been trained yet."
+
         lgb.plot_importance(
             self._model,
-            figsize=(20, 50),
-            height=0.7,
+            figsize=(10, 12),
+            height=0.75,
             importance_type="gain",
             max_num_features=50
         )
         plt.title(self.name)
+        plt.tight_layout()
         plt.savefig(Path(output_dir) / "feature_importance.png")
         plt.clf()
