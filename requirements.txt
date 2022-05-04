@@ -13,6 +13,7 @@ git+ssh://git@github.com/Coreai-org/corecontrol.git@master
 statsmodels>=0.13.2
 scikit-learn>=1.0.2
 lightgbm>=3.3.2
+graphviz>=0.20
 xgboost>=1.6.0
 
 # Plotting

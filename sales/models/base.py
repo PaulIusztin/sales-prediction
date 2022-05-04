@@ -34,5 +34,9 @@ class Model(ABC):
         # TODO: Is is ok to let the return type be pd.Series? Maybe np.ndarray would be better.
         pass
 
+    @abstractmethod
+    def save(self, file_path: str):
+        pass
+
     def plot(self, output_dir: str):
         pass

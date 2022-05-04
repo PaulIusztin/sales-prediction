@@ -80,6 +80,7 @@ runner:
 #        hyper_parameters:
 #          objective: mse
 #          metric: rmse
+#          num_boost_round: 1000
 #          num_leaves: 127
 #          learning_rate: 0.005
 #          feature_fraction: 0.75

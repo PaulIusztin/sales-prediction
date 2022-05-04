@@ -28,7 +28,7 @@ class RegressionEvaluator:
         for metric_name, metric_result in results.items():
             if model.logger is not None:
                 model.logger.report_scalar(
-                    title=metric_name.upper(),
+                    title=f"Test/{metric_name.upper()}",
                     series=model.name,
                     value=metric_result,
                     iteration=1

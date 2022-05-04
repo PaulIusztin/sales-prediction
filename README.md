@@ -8,6 +8,11 @@ pip install -r requirements.txt
 jupyter labextension install jupyterlab-plotly
 ```
 
+If you want to plot decision trees, you need to install `graphziv` on your system:
+```shell
+sudo apt-get install graphviz
+```
+
 # Jupyter
 ### Jupyter Notebook
 ```shell
