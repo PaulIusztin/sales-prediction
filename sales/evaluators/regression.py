@@ -1,17 +1,27 @@
 import json
+from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import seaborn as sns
 
 from matplotlib import pyplot as plt
-from sklearn import metrics
+from sklearn import metrics as sk_metrics
 
 from datasets import Dataset
 from models import Model
 
 
 class RegressionEvaluator:
+    def __init__(self, metrics: Tuple[str] = ("r2", "rmse")):
+        self.metrics = metrics
+
+        self.supported_metrics = {
+            "r2": sk_metrics.r2_score,
+            "rmse": partial(sk_metrics.mean_squared_error, squared=False),
+            "mse": sk_metrics.mean_squared_error,
+        }
+
     def compute(
             self,
             model: Model,
@@ -26,12 +36,10 @@ class RegressionEvaluator:
             X_test, y_test = dataset.get(split=split, scaled=False)
         y_pred = model.predict(X=X_test)
 
-        r2 = metrics.r2_score(y_test, y_pred)
-        rmse = metrics.mean_squared_error(y_test, y_pred, squared=False)
-        results = {
-            "r2": r2,
-            "rmse": rmse
-        }
+        results = {}
+        for metric in self.metrics:
+            f = self.supported_metrics[metric]
+            results[metric] = f(y_test, y_pred)
 
         save_results = output_dir is not None
         if save_results:

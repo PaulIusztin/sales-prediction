@@ -233,7 +233,6 @@ class MonthPriceSalesPipeline(Pipeline):
     @classmethod
     def _add_is_first_shop_transaction_feature(cls, data: pd.DataFrame) -> pd.DataFrame:
         # TODO: Add shop_item_sold_before instead?
-
         is_first_shop_transaction_df = data.groupby(["shop_id", "item_id"], as_index=False)["date_block_num"].min()
         is_first_shop_transaction_df["is_first_shop_transaction"] = 1
 

@@ -26,7 +26,7 @@ class LinearRegressionModel(Model):
 
         self._feature_names: Optional[List[str]] = None
         self._model: Optional[LinearRegression] = None
-        self.evaluator = RegressionEvaluator()
+        self.evaluator = RegressionEvaluator(metrics=("rmse", ))
 
     def fit(self, dataset: Dataset) -> "Model":
         X_train, y_train = dataset.get(split="train")

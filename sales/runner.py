@@ -62,6 +62,7 @@ class Runner:
             logger.info(f"Fitting model: {model.name}")
             model.fit(dataset)
 
+            logger.info(f"Plotting model: {model.name}")
             model_output_dir = self.output_dir / model.name
             model_output_dir.mkdir(parents=True, exist_ok=True)
             model.plot(output_dir=str(model_output_dir))
@@ -72,6 +73,8 @@ class Runner:
     def test(self, dataset: Dataset) -> dict:
         results = {}
         for model in self.models:
+            logger.info(f"Testing model: {model.name}")
+
             model_output_dir = self.output_dir / model.name
             model_output_dir.mkdir(parents=True, exist_ok=True)
 

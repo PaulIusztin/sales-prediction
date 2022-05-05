@@ -21,9 +21,10 @@ class PersistenceModel(Model):
         )
 
         self.predict_column = self.hyper_parameters["predict_column"]
-        self.evaluator = RegressionEvaluator()
+        self.evaluator = RegressionEvaluator(metrics=("rmse", ))
 
     def fit(self, dataset: Dataset) -> "Model":
+        # TODO: See how to refactor this group of code between classes.
         train_results = self.evaluator.compute(
             model=self,
             dataset=dataset,
@@ -45,7 +46,7 @@ class PersistenceModel(Model):
                 for metric_name, metric_value in results.items():
                     self.logger.report_scalar(
                         title=metric_name.upper(),
-                        series=f"LinearRegression/{split_name}",
+                        series=f"Persistence/{split_name}",
                         value=metric_value,
                         iteration=0
                     )
