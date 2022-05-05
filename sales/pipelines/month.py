@@ -1,6 +1,7 @@
 import datetime
 import logging
 from functools import partial, lru_cache
+from itertools import product
 from typing import Dict, List, Union
 
 import numpy as np
@@ -103,15 +104,15 @@ class MonthPriceSalesPipeline(Pipeline):
     def _cast_columns(cls, data: pd.DataFrame) -> pd.DataFrame:
         data["date"] = pd.to_datetime(data["date"], format="%d.%m.%Y")
 
-        data["date_block_num"] = data["date_block_num"].astype(np.int8)
-        data["shop_id"] = data["shop_id"].astype(np.int8)
+        data["date_block_num"] = data["date_block_num"].astype(np.int16)
+        data["shop_id"] = data["shop_id"].astype(np.int16)
         data["shop_name"] = data["shop_name"].astype(pd.StringDtype())
-        data["item_id"] = data["item_id"].astype(np.int16)
+        data["item_id"] = data["item_id"].astype(np.int32)
         data["item_name"] = data["item_name"].astype(pd.StringDtype())
-        data["item_category_id"] = data["item_category_id"].astype(np.int8)
+        data["item_category_id"] = data["item_category_id"].astype(np.int16)
         data["item_category_name"] = data["item_category_name"].astype(pd.StringDtype())
         data["item_price"] = data["item_price"].astype(np.float32)
-        data["item_cnt_day"] = data["item_cnt_day"].astype(np.int16)
+        data["item_cnt_day"] = data["item_cnt_day"].astype(np.int32)
 
         return data
 
@@ -133,6 +134,49 @@ class MonthPriceSalesPipeline(Pipeline):
         data = data.\
             groupby(["date_block_num", "shop_id", "item_id"], as_index=False).\
             agg(**agg_operations)
+        data["date"] = data["date"].apply(lambda date: date.replace(day=1))
+
+        # Get references to different ids & string features.
+        unique_item_features = data[
+            ["item_id", "item_name", "item_category_id", "item_category_name"]
+        ].drop_duplicates()
+        unique_datetime_features = data[["date_block_num", "date"]].drop_duplicates()
+        unique_shop_features = data[["shop_id", "shop_name"]].drop_duplicates()
+
+        # Keep a reference of the initial dtypes to cast them back after filling the missing values.
+        dtypes = data.dtypes.to_dict()
+
+        # Fill data discontinuity.
+        # TODO: Make the filling on the whole "date_block_num" range?
+        #  Not only from the initial date_block_num an item_id appeared.
+        filled_data = []
+        for block_num in data["date_block_num"].unique():
+            block_num_shop_ids = data.loc[data["date_block_num"] == block_num, "shop_id"].unique()
+            block_num_item_ids = data.loc[data["date_block_num"] == block_num, "item_id"].unique()
+
+            possible_combinations = list(product(*[[block_num], block_num_shop_ids, block_num_item_ids]))
+            filled_data.append(np.array(possible_combinations, dtype="int32"))
+
+        filled_data = np.vstack(filled_data)
+        filled_data = pd.DataFrame(filled_data, columns=["date_block_num", "shop_id", "item_id"])
+        data = filled_data.merge(data, on=["date_block_num", "shop_id", "item_id"], how="left")
+
+        # Merge unique features to fill missing ids & string values.
+        data = data.drop(columns=["item_name", "item_category_id", "item_category_name"])
+        data = data.merge(unique_item_features, on=["item_id"], how="left")
+        data = data.drop(columns=["date"])
+        data = data.merge(unique_datetime_features, on=["date_block_num"], how="left")
+        data = data.drop(columns=["shop_name"])
+        data = data.merge(unique_shop_features, on=["shop_id"], how="left")
+
+        # Fill missing numerical values (e.g. price, sales, revenue).
+        numeric_columns = data.select_dtypes(include=['number']).columns
+        numeric_columns = set(numeric_columns)
+        numeric_columns = numeric_columns - {"date_block_num", "shop_id", "item_id", "item_category_id"}
+        numeric_columns = list(numeric_columns)
+        data[numeric_columns] = data[numeric_columns].fillna(0)
+
+        data = data.astype(dtypes)
 
         return data
 

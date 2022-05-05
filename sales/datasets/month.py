@@ -43,6 +43,7 @@ class MonthPriceSalesDataset(Dataset):
             self.save_to_cache(data)
         else:
             logger.info("Loading data from cache.")
+            data.info()
 
         x, y = self.pick_labels(data, label_columns=["item_sales"])
         # TODO: Can we find a better way to keep the unscaled splits (instead of a copy)?
