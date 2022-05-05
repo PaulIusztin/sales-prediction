@@ -1,4 +1,7 @@
+import logging
 import pickle
+import pprint
+
 from pathlib import Path
 from typing import Optional, List
 
@@ -10,6 +13,9 @@ from sklearn.linear_model import LinearRegression
 
 from datasets import Dataset
 from models import Model
+
+
+logger = logging.getLogger(__name__)
 
 
 class LinearRegressionModel(Model):
@@ -31,21 +37,23 @@ class LinearRegressionModel(Model):
         self._model = self._model.fit(X_train, y_train)
 
         # TODO: See how to refactor this group of code between classes.
+        train_results = self.evaluator.compute(
+            model=self,
+            dataset=dataset,
+            split="train",
+            plot=False,
+            output_dir=None
+        )
+        validation_results = self.evaluator.compute(
+            model=self,
+            dataset=dataset,
+            split="validation",
+            plot=False,
+            output_dir=None
+        )
+        logger.info(f"Train results: {pprint.pformat(train_results, indent=4)}")
+        logger.info(f"Validation results: {pprint.pformat(validation_results, indent=4)}")
         if self.logger is not None:
-            train_results = self.evaluator.compute(
-                model=self,
-                dataset=dataset,
-                split="train",
-                plot=False,
-                output_dir=None
-            )
-            validation_results = self.evaluator.compute(
-                model=self,
-                dataset=dataset,
-                split="validation",
-                plot=False,
-                output_dir=None
-            )
             for split_name, results in (("train", train_results), ("validation", validation_results)):
                 for metric_name, metric_value in results.items():
                     self.logger.report_scalar(
