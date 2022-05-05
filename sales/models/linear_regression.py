@@ -14,10 +14,13 @@ from models import Model
 
 class LinearRegressionModel(Model):
     def __init__(self, hyper_parameters: Optional[dict] = None):
+        from evaluators import RegressionEvaluator
+
         super().__init__("linear_regression", hyper_parameters=hyper_parameters)
 
         self._feature_names: Optional[List[str]] = None
         self._model: Optional[LinearRegression] = None
+        self.evaluator = RegressionEvaluator()
 
     def fit(self, dataset: Dataset) -> "Model":
         X_train, y_train = dataset.get(split="train")
@@ -26,6 +29,31 @@ class LinearRegressionModel(Model):
 
         self._model = LinearRegression(**self.hyper_parameters)
         self._model = self._model.fit(X_train, y_train)
+
+        # TODO: See how to refactor this group of code between classes.
+        if self.logger is not None:
+            train_results = self.evaluator.compute(
+                model=self,
+                dataset=dataset,
+                split="train",
+                plot=False,
+                output_dir=None
+            )
+            validation_results = self.evaluator.compute(
+                model=self,
+                dataset=dataset,
+                split="validation",
+                plot=False,
+                output_dir=None
+            )
+            for split_name, results in (("train", train_results), ("validation", validation_results)):
+                for metric_name, metric_value in results.items():
+                    self.logger.report_scalar(
+                        title=metric_name.upper(),
+                        series=f"LinearRegression/{split_name}",
+                        value=metric_value,
+                        iteration=0
+                    )
 
         return self
 

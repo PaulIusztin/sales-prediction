@@ -76,11 +76,20 @@ class Runner:
             model_output_dir.mkdir(parents=True, exist_ok=True)
 
             # TODO: Add a prediction line plot.
-            results[model.name] = self.evaluator.compute(
+            model_results = self.evaluator.compute(
                 model=model,
                 dataset=dataset,
                 plot=True,
                 output_dir=str(model_output_dir)
             )
+            for metric_name, metric_result in model_results.items():
+                if model.logger is not None:
+                    model.logger.report_scalar(
+                        title=f"Test/{metric_name.upper()}",
+                        series=model.name,
+                        value=metric_result,
+                        iteration=1
+                    )
+            results[model.name] = model_results
 
         return results

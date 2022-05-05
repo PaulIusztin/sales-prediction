@@ -75,34 +75,34 @@ runner:
           predict_column: item_sales_lag_1
     - name: linear_regression
       parameters: {}
-    - name: lightgbm
-      parameters:
-        hyper_parameters:
-          objective: mse
-          metric: rmse
-          num_boost_round: 1000
-          num_leaves: 127
-          learning_rate: 0.005
-          feature_fraction: 0.75
-          bagging_fraction: 0.75
-          bagging_freq: 5
-          seed: 1
-        meta_parameters:
-          early_stopping_rounds: 30
-          evaluation_period: 100
-    - name: xgboost
-      parameters:
-        hyper_parameters:
-          objective: reg:squarederror
-          eval_metric: rmse
-          num_boost_round: 1000
-          nthread: 4
-          n_estimators: 100
-          reg_lambda: 1
-          gamma: 0
-          max_depth: 3
-          eta: 1
-        meta_parameters:
-          early_stopping_rounds: 30
-          evaluation_period: 100
+#    - name: lightgbm
+#      parameters:
+#        hyper_parameters:
+#          objective: mse
+#          metric: rmse
+#          num_boost_round: 1000
+#          num_leaves: 127
+#          learning_rate: 0.005
+#          feature_fraction: 0.75
+#          bagging_fraction: 0.75
+#          bagging_freq: 5
+#          seed: 1
+#        meta_parameters:
+#          early_stopping_rounds: 30
+#          evaluation_period: 100
+#    - name: xgboost
+#      parameters:
+#        hyper_parameters:
+#          objective: reg:squarederror
+#          eval_metric: rmse
+#          num_boost_round: 1000
+#          nthread: 4
+#          n_estimators: 100
+#          reg_lambda: 1
+#          gamma: 0
+#          max_depth: 3
+#          eta: 1
+#        meta_parameters:
+#          early_stopping_rounds: 30
+#          evaluation_period: 100
 

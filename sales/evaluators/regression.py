@@ -12,11 +12,18 @@ from models import Model
 
 
 class RegressionEvaluator:
-    def compute(self, model: Model, dataset: Dataset, plot: bool = True, output_dir: Optional[str] = None) -> dict:
+    def compute(
+            self,
+            model: Model,
+            dataset: Dataset,
+            split: str = "test",
+            plot: bool = True,
+            output_dir: Optional[str] = None
+    ) -> dict:
         if model.use_scaled_data:
-            X_test, y_test = dataset.get(split="test")
+            X_test, y_test = dataset.get(split=split)
         else:
-            X_test, y_test = dataset.get(split="test", scaled=False)
+            X_test, y_test = dataset.get(split=split, scaled=False)
         y_pred = model.predict(X=X_test)
 
         r2 = metrics.r2_score(y_test, y_pred)
@@ -25,16 +32,9 @@ class RegressionEvaluator:
             "r2": r2,
             "rmse": rmse
         }
-        for metric_name, metric_result in results.items():
-            if model.logger is not None:
-                model.logger.report_scalar(
-                    title=f"Test/{metric_name.upper()}",
-                    series=model.name,
-                    value=metric_result,
-                    iteration=1
-                )
 
-        if output_dir is not None:
+        save_results = output_dir is not None
+        if save_results:
             results_file = Path(output_dir) / "results.json"
             with open(results_file, "w") as f:
                 str_results = {k: str(v) for k, v in results.items()}
